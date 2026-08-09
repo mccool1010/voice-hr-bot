@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="docs/images/landing-page.png" alt="Voice HR Bot — AI Interview Simulator" width="100%" />
-</p>
+
 
 <h1 align="center">🎙️ Voice HR Bot</h1>
 
@@ -20,24 +18,8 @@
   Practice job interviews with an AI interviewer that <em>listens</em> to your voice, asks role-specific questions, and <em>speaks</em> responses back to you — all in a stunning glassmorphic UI with animated shader backgrounds.
 </p>
 
----
 
-## 📸 Screenshots
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="docs/images/landing-page.png" alt="Landing Page — Role Selection" width="100%" />
-      <p align="center"><strong>Landing Page</strong> — Select your role & microphone</p>
-    </td>
-    <td width="50%">
-      <img src="docs/images/chat-interface.png" alt="Chat Interface — Live Interview" width="100%" />
-      <p align="center"><strong>Live Interview</strong> — Voice-driven conversation</p>
-    </td>
-  </tr>
-</table>
-
----
 
 ## ✨ Features
 
