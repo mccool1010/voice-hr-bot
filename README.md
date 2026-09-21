@@ -217,13 +217,17 @@ npm run dev                       # http://localhost:5173 — proxies /api and /
 canned questions and scores from the local PyTorch model only.
 
 **GPU acceleration:** `pip install -e .` pulls CPU PyTorch. For an NVIDIA GPU,
-reinstall torch from the CUDA index — RTX 50-series (Blackwell) cards need CUDA 12.8:
+swap in a CUDA build of the same torch version. RTX 50-series (Blackwell) cards
+need CUDA 12.8 or newer; for torch 2.14 that is the CUDA 13.0 build, which needs
+NVIDIA driver 580+:
 
 ```bash
-pip install --force-reinstall torch --index-url https://download.pytorch.org/whl/cu128
+pip install --force-reinstall --no-deps "torch==2.14.0" --index-url https://download.pytorch.org/whl/cu130
 ```
 
-Whisper then runs in `float16` on the GPU automatically.
+Whisper then tries the GPU in `float16`. If CTranslate2 (Whisper's runtime)
+can't use it — it ships its own CUDA dependencies, separate from PyTorch's — it
+falls back to CPU automatically, on load or on the first transcription.
 
 ---
 
@@ -262,11 +266,19 @@ container answers its first request quickly. PostgreSQL is supplied through
 `DATABASE_URL`), then set `JWT_SECRET` and `GROQ_API_KEY`. [`railway.json`](railway.json)
 configures the build and health check.
 
-**Hugging Face Spaces** — create a Docker Space, add a free
-[Neon](https://neon.tech) database, and set `DATABASE_URL`, `JWT_SECRET` and
-`GROQ_API_KEY` as Space secrets. The [deploy workflow](.github/workflows/deploy-hf.yml)
-pushes to the Space after CI passes, once you set the `HF_TOKEN` secret and the
-`HF_SPACE` variable.
+**Hugging Face Spaces** (free) — with a [Neon](https://neon.tech) database
+(turn connection pooling off) and a [Groq](https://console.groq.com/keys) key:
+
+```bash
+pip install huggingface_hub
+HF_TOKEN=... DATABASE_URL=... GROQ_API_KEY=... JWT_SECRET=...   python deploy/huggingface/deploy.py --space <user>/voice-hr --set-secrets
+```
+
+That creates the Space, stores the secrets, and uploads only git-tracked files.
+After that, the [deploy workflow](.github/workflows/deploy-hf.yml) redeploys on
+every green CI run on `main`, once the repo has an `HF_TOKEN` secret and an
+`HF_SPACE` variable. Hosted Postgres URLs work as-is: `sslmode` and other libpq
+options are translated for asyncpg automatically.
 
 The landing page has a one-click demo account, so visitors can try it without
 signing up.
@@ -276,7 +288,7 @@ signing up.
 ## Testing and CI
 
 ```bash
-cd apps/api && pytest            # 56 tests: graph, scoring, analytics, full HTTP lifecycle
+cd apps/api && pytest            # 68 tests: graph, scoring, speech, config, analytics, HTTP lifecycle
 cd apps/web && npm test          # session reducer, formatting, components
 ```
 

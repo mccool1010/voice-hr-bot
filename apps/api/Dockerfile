@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # ─── API image ────────────────────────────────────────────────────────────────
 # CPU PyTorch by default: the CUDA wheels add ~3 GB and free hosting has no GPU.
-# For a local GPU build: --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu128
-# (CUDA 12.8 wheels are required for RTX 50-series / Blackwell cards.)
+# For a local GPU build: --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu130
+# (RTX 50-series / Blackwell cards need CUDA 12.8+; torch 2.14 ships it as cu130.)
 
 FROM python:3.12-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \

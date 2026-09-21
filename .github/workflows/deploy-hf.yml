@@ -1,10 +1,10 @@
 name: Deploy to Hugging Face Spaces
 
-# Mirrors the repo to a Docker Space, which builds the root Dockerfile.
-# Setup once:
-#   1. Create a Space (SDK: Docker) at huggingface.co/new-space
-#   2. Repo secrets: HF_TOKEN (write token), and variable HF_SPACE (e.g. user/voice-hr)
-#   3. In the Space settings add secrets: DATABASE_URL, JWT_SECRET, GROQ_API_KEY
+# Uploads the app to a Docker Space after CI passes on main; the Space builds
+# the root Dockerfile. Secrets (DATABASE_URL, GROQ_API_KEY, JWT_SECRET) live in
+# the Space settings and are set once with deploy/huggingface/deploy.py.
+#
+# Repo setup: secret HF_TOKEN (write token) and variable HF_SPACE (user/space).
 
 on:
   workflow_run:
@@ -20,17 +20,14 @@ jobs:
       (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          fetch-depth: 0
-          lfs: true
-      - name: Push to Space
+          python-version: "3.12"
+      - run: pip install huggingface_hub
+      - name: Upload to Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          # Spaces read their config from README front matter.
-          cp deploy/huggingface/README.md README.md
-          git config user.name "deploy-bot"
-          git config user.email "deploy-bot@users.noreply.github.com"
-          git commit -am "Space config" --allow-empty
-          git push --force "https://user:${HF_TOKEN}@huggingface.co/spaces/${{ vars.HF_SPACE }}" HEAD:main
+        run: >-
+          python deploy/huggingface/deploy.py --space "${{ vars.HF_SPACE }}"
+          --message "Deploy ${{ github.sha }}"

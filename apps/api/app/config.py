@@ -5,6 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,6 +15,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # root; a missing .env there is simply ignored.
 _PARENTS = Path(__file__).resolve().parents
 REPO_ROOT = _PARENTS[3] if len(_PARENTS) > 3 else _PARENTS[-1]
+
+
+# libpq connection options that asyncpg does not understand.
+_LIBPQ_ONLY_PARAMS = frozenset(
+    {"channel_binding", "gssencmode", "target_session_attrs", "sslrootcert", "options"}
+)
 
 
 class Environment(StrEnum):
@@ -111,33 +118,48 @@ class Settings(BaseSettings):
             raise ValueError("JWT_SECRET must be set to a real value in production")
         return v
 
-    @computed_field  # type: ignore[prop-decorator]
     @property
-    def database_url(self) -> str:
-        """Async SQLAlchemy DSN."""
+    def _libpq_url(self) -> str:
+        """The configured database as a plain libpq URL, query string intact."""
         if self.database_url_override:
-            # Railway and Heroku hand out `postgres://`, which SQLAlchemy rejects.
             url = self.database_url_override
-            for prefix, replacement in (
-                ("postgres://", "postgresql+asyncpg://"),
-                ("postgresql://", "postgresql+asyncpg://"),
-            ):
+            for prefix in ("postgres://", "postgresql+asyncpg://", "postgresql+psycopg://"):
                 if url.startswith(prefix):
-                    return url.replace(prefix, replacement, 1)
+                    return "postgresql://" + url[len(prefix) :]
             return url
         return (
-            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def checkpoint_database_url(self) -> str:
-        """Plain libpq URL for the LangGraph checkpointer.
+    def database_url(self) -> str:
+        """Async SQLAlchemy DSN for asyncpg.
 
-        psycopg rejects SQLAlchemy dialect prefixes like `postgresql+psycopg://`.
+        Hosted Postgres (Neon, Supabase, Railway) hands out libpq URLs such as
+        `...?sslmode=require&channel_binding=require`. asyncpg rejects libpq-only
+        parameters, so they are translated: sslmode becomes asyncpg's `ssl`, and
+        libpq connection options with no asyncpg equivalent are dropped.
         """
-        return self.database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+        parts = urlsplit(self._libpq_url)
+        query: list[tuple[str, str]] = []
+        for key, value in parse_qsl(parts.query, keep_blank_values=True):
+            if key == "sslmode":
+                query.append(("ssl", value))
+            elif key not in _LIBPQ_ONLY_PARAMS:
+                query.append((key, value))
+        return urlunsplit(parts._replace(scheme="postgresql+asyncpg", query=urlencode(query)))
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def checkpoint_database_url(self) -> str:
+        """Plain libpq URL for the LangGraph checkpointer (psycopg).
+
+        Kept separate from `database_url` because psycopg needs the original
+        libpq parameters — `sslmode` in particular — that asyncpg cannot take.
+        """
+        return self._libpq_url
 
     @computed_field  # type: ignore[prop-decorator]
     @property

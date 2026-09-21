@@ -13,6 +13,7 @@ call is dispatched to a worker thread.
 from __future__ import annotations
 
 import asyncio
+import math
 import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -27,8 +28,10 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 _model: WhisperModel | None = None
+_device: str | None = None
 _lock = threading.Lock()
 _load_failed = False
+_force_cpu = False
 
 
 class TranscriptionError(RuntimeError):
@@ -58,6 +61,9 @@ def _resolve_device() -> tuple[str, str]:
     device = settings.whisper_device
     compute = settings.whisper_compute_type
 
+    if _force_cpu:
+        return "cpu", "int8"
+
     if device == "auto":
         try:
             import torch
@@ -73,7 +79,7 @@ def _resolve_device() -> tuple[str, str]:
 
 
 def _load() -> WhisperModel | None:
-    global _model, _load_failed
+    global _model, _device, _load_failed
 
     if _model is not None or _load_failed:
         return _model
@@ -83,51 +89,72 @@ def _load() -> WhisperModel | None:
             return _model
         try:
             from faster_whisper import WhisperModel
-
-            device, compute = _resolve_device()
-            log.info(
-                "whisper.loading",
-                model=settings.whisper_model,
-                device=device,
-                compute_type=compute,
-            )
-            _model = WhisperModel(settings.whisper_model, device=device, compute_type=compute)
-            log.info("whisper.loaded", model=settings.whisper_model, device=device)
         except Exception as exc:
             log.warning("whisper.unavailable", error=str(exc))
             _load_failed = True
+            return None
+
+        device, compute = _resolve_device()
+        try:
+            log.info(
+                "whisper.loading", model=settings.whisper_model, device=device, compute_type=compute
+            )
+            _model = WhisperModel(settings.whisper_model, device=device, compute_type=compute)
+            _device = device
+            log.info("whisper.loaded", model=settings.whisper_model, device=device)
+        except Exception as exc:
+            if device == "cuda":
+                # PyTorch seeing the GPU does not mean CTranslate2 can use it:
+                # it needs its own CUDA/cuDNN libraries. CPU still works.
+                log.warning("whisper.gpu_unavailable_falling_back_to_cpu", error=str(exc))
+                _model = _load_cpu()
+            else:
+                log.warning("whisper.unavailable", error=str(exc))
+            _load_failed = _model is None
     return _model
+
+
+def _load_cpu() -> WhisperModel | None:
+    """Load on CPU. Called with the lock held."""
+    global _device, _force_cpu
+    from faster_whisper import WhisperModel
+
+    _force_cpu = True
+    try:
+        model = WhisperModel(settings.whisper_model, device="cpu", compute_type="int8")
+    except Exception as exc:
+        log.warning("whisper.unavailable", error=str(exc))
+        return None
+    _device = "cpu"
+    log.info("whisper.loaded", model=settings.whisper_model, device="cpu")
+    return model
+
+
+def device() -> str | None:
+    """Where Whisper is running, once loaded."""
+    return _device
 
 
 def is_available() -> bool:
     return settings.speech_enabled and not _load_failed
 
 
-def transcribe_sync(audio_path: str, *, language: str | None = "en") -> Transcript:
-    """Transcribe a file on disk. Blocking — call through `transcribe`."""
-    model = _load()
-    if model is None:
-        raise TranscriptionError(
-            "Speech recognition is unavailable on this server. Type your answer instead."
-        )
-
-    try:
-        segments, info = model.transcribe(
-            audio_path,
-            language=language,
-            word_timestamps=True,
-            vad_filter=True,
-            # Trims leading/trailing silence without clipping quiet speech.
-            vad_parameters={"min_silence_duration_ms": 500},
-        )
-    except Exception as exc:
-        raise TranscriptionError(f"Could not transcribe the audio: {exc}") from exc
+def _run(model: WhisperModel, audio_path: str, language: str | None) -> Transcript:
+    segments, info = model.transcribe(
+        audio_path,
+        language=language,
+        word_timestamps=True,
+        vad_filter=True,
+        # Trims leading/trailing silence without clipping quiet speech.
+        vad_parameters={"min_silence_duration_ms": 500},
+    )
 
     words: list[dict[str, Any]] = []
     pieces: list[str] = []
     logprobs: list[float] = []
 
-    # `segments` is a generator — consuming it is what performs the work.
+    # `segments` is a lazy generator: iterating it is what runs the model, so
+    # this loop is where inference errors actually surface.
     for segment in segments:
         pieces.append(segment.text)
         logprobs.append(segment.avg_logprob)
@@ -145,8 +172,6 @@ def transcribe_sync(audio_path: str, *, language: str | None = "en") -> Transcri
     # reads sensibly as a confidence in the UI.
     confidence = None
     if logprobs:
-        import math
-
         confidence = round(min(1.0, math.exp(sum(logprobs) / len(logprobs))), 4)
 
     return Transcript(
@@ -156,6 +181,35 @@ def transcribe_sync(audio_path: str, *, language: str | None = "en") -> Transcri
         confidence=confidence,
         words=words,
     )
+
+
+def transcribe_sync(audio_path: str, *, language: str | None = "en") -> Transcript:
+    """Transcribe a file on disk. Blocking — call through `transcribe`."""
+    global _model
+
+    model = _load()
+    if model is None:
+        raise TranscriptionError(
+            "Speech recognition is unavailable on this server. Type your answer instead."
+        )
+
+    try:
+        return _run(model, audio_path, language)
+    except Exception as exc:
+        if _device != "cuda":
+            raise TranscriptionError(f"Could not transcribe the audio: {exc}") from exc
+        # CTranslate2 loads cuBLAS/cuDNN lazily, so a missing GPU library only
+        # shows up on the first real inference. Switch to CPU for good and retry.
+        log.warning("whisper.gpu_inference_failed_falling_back_to_cpu", error=str(exc))
+        with _lock:
+            _model = _load_cpu()
+        if _model is None:
+            raise TranscriptionError(f"Could not transcribe the audio: {exc}") from exc
+
+    try:
+        return _run(_model, audio_path, language)
+    except Exception as exc:
+        raise TranscriptionError(f"Could not transcribe the audio: {exc}") from exc
 
 
 async def transcribe(audio_path: str, *, language: str | None = "en") -> Transcript:
@@ -169,6 +223,8 @@ async def warmup() -> None:
 
 def reset() -> None:
     """Test hook."""
-    global _model, _load_failed
+    global _model, _device, _load_failed, _force_cpu
     _model = None
+    _device = None
     _load_failed = False
+    _force_cpu = False
