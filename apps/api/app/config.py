@@ -99,7 +99,7 @@ class Settings(BaseSettings):
     groq_model: str = "openai/gpt-oss-120b"
     # Groq rate limits are per model, so on a 429 the provider fails over to
     # these immediately instead of sleeping on retry-after. Comma-separated.
-    groq_fallback_models: str = "qwen/qwen3.8-27b"
+    groq_fallback_models: str = "qwen/qwen3.8-27b,openai/gpt-oss-20b"
     # Only sent to gpt-oss models: "low" cuts reasoning tokens ~70% with the
     # same grades (measured), which matters on an 8k tokens/min free tier.
     groq_reasoning_effort: str = "low"

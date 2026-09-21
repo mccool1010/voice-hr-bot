@@ -104,6 +104,7 @@ def main() -> int:
     render = Render(required("RENDER_API_KEY"))
     owner_id = render.owner_id()
     service = render.find_service(owner_id)
+    created = False
 
     if args.deploy_only:
         if service is None:
@@ -130,6 +131,7 @@ def main() -> int:
                     "serviceDetails": SERVICE_DETAILS,
                 },
             )["service"]
+            created = True
             print(f"Created service {service['id']}")
         else:
             # Keep the existing JWT secret: rotating it would sign everyone out.
@@ -144,9 +146,16 @@ def main() -> int:
 
     service_id = service["id"]
     url = service.get("serviceDetails", {}).get("url", "")
-    deploy = render.call(
-        "POST", f"/services/{service_id}/deploys", json={"clearCache": "do_not_clear"}
-    )
+    if created:
+        # Creating a service starts its first deploy; triggering another would
+        # cancel it. Wait on the one Render already started.
+        deploy = render.call("GET", f"/services/{service_id}/deploys", params={"limit": 1})[0][
+            "deploy"
+        ]
+    else:
+        deploy = render.call(
+            "POST", f"/services/{service_id}/deploys", json={"clearCache": "do_not_clear"}
+        )
     print(f"Deploying {deploy['id']} …")
     status = wait_for_deploy(render, service_id, deploy["id"])
 

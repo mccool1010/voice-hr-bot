@@ -242,7 +242,7 @@ All settings are environment variables (see [`.env.example`](.env.example)).
 | `ANTHROPIC_MODEL` | `claude-opus-5` | Claude model; `ANTHROPIC_EFFORT` sets reasoning effort |
 | `GROQ_API_KEY` | — | Groq free tier ([console.groq.com](https://console.groq.com/keys)) |
 | `GROQ_MODEL` | `openai/gpt-oss-120b` | `qwen/qwen3.8-27b` is ~2.5× faster with similar grading |
-| `GROQ_FALLBACK_MODELS` | `qwen/qwen3.8-27b` | Groq limits tokens/min per model; on a 429 the provider fails over instantly instead of sleeping on `retry-after` |
+| `GROQ_FALLBACK_MODELS` | `qwen/qwen3.8-27b,openai/gpt-oss-20b` | Groq limits tokens/min per model; on a 429 the provider fails over instantly instead of sleeping on `retry-after` |
 | `GROQ_REASONING_EFFORT` | `low` | gpt-oss only: ~70% fewer reasoning tokens, same grades (measured) |
 | `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | `http://localhost:11434` / `qwen2.5:7b-instruct` | Local inference |
 | `DATABASE_URL` | built from `POSTGRES_*` | Takes precedence; `postgres://` URLs from Railway/Heroku are handled |
