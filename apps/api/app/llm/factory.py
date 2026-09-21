@@ -40,7 +40,14 @@ def _construct(name: LLMProviderName, cfg: Settings) -> BaseLLMProvider:
         case LLMProviderName.groq:
             from app.llm.groq_provider import GroqProvider
 
-            return GroqProvider(api_key=cfg.groq_api_key or "", model=cfg.groq_model)
+            return GroqProvider(
+                api_key=cfg.groq_api_key or "",
+                model=cfg.groq_model,
+                fallback_models=[
+                    m.strip() for m in cfg.groq_fallback_models.split(",") if m.strip()
+                ],
+                reasoning_effort=cfg.groq_reasoning_effort,
+            )
         case LLMProviderName.ollama:
             from app.llm.ollama_provider import OllamaProvider
 
