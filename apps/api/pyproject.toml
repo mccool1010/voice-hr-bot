@@ -1,0 +1,106 @@
+[project]
+name = "voice-hr-api"
+version = "2.0.0"
+description = "AI interview simulator — FastAPI, LangGraph, PyTorch"
+requires-python = ">=3.12"
+
+dependencies = [
+    # Web
+    "fastapi>=0.118",
+    "uvicorn[standard]>=0.34",
+    "pydantic[email]>=2.11",
+    "pydantic-settings>=2.8",
+    "python-multipart>=0.0.20",
+    "websockets>=14.0",
+
+    # Database
+    "sqlalchemy[asyncio]>=2.0.40",
+    "asyncpg>=0.30",
+    "alembic>=1.15",
+    "greenlet>=3.1",
+
+    # Auth
+    "pyjwt>=2.10",
+    "bcrypt>=4.2,<5",
+
+    # LLM orchestration
+    "langgraph>=0.3.20",
+    "langgraph-checkpoint-postgres>=2.0.15",
+    "psycopg[binary,pool]>=3.2",
+
+    # LLM providers (all optional at runtime, selected via LLM_PROVIDER)
+    "anthropic>=0.49",
+    "groq>=0.18",
+    "httpx>=0.28",
+
+    # Data / ML
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "torch>=2.6",
+    "sentence-transformers>=3.4",
+
+    # Speech
+    "faster-whisper>=1.1",
+
+    # Documents
+    "pypdf>=5.3",
+    "python-docx>=1.1",
+
+    # Observability
+    "structlog>=25.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "pytest-cov>=6.0",
+    "httpx>=0.28",
+    "asgi-lifespan>=2.1",
+    "ruff>=0.9",
+    "mypy>=1.15",
+    "aiosqlite>=0.21",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF", "ASYNC"]
+# B008: FastAPI Depends()/File() defaults. UP046/UP047: TypeVar style kept deliberately.
+ignore = ["B008", "N818", "UP046", "UP047"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "E501"]
+"alembic/*" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+exclude = ["alembic/", "ml/"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "integration: requires a live PostgreSQL database",
+    "slow: loads ML models (torch, whisper, embeddings)",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/main.py", "*/__init__.py"]
