@@ -31,6 +31,38 @@ feedback that quotes what you actually said.
 
 ---
 
+## Highlights
+
+- **Full stack, in production.** A React and TypeScript frontend, a FastAPI
+  backend and PostgreSQL, deployed with continuous delivery: every push runs
+  the test suite, and a green run redeploys the live site automatically.
+- **Stateful AI orchestration.** The interview is a LangGraph state machine with
+  human-in-the-loop interrupts and PostgreSQL checkpointing, so an interview
+  survives a dropped connection, a page reload or a server restart.
+- **Provider-agnostic LLM layer.** One interface over Ollama, Groq and Claude,
+  with every structured output validated by Pydantic. On Groq's free tier it
+  fails over between models on rate limits instead of waiting, and tuned
+  reasoning effort cuts reasoning tokens by ~60% with near-identical grades. Live,
+  an answer is scored and the next question returned in about 1.5–4 s.
+- **Speech pipeline.** Server-side Whisper with word-level timestamps, which
+  feed pace, pause and hesitation features. 17.6 s of speech transcribes in
+  1.5 s on CPU, or 1.1 s through Groq.
+- **A trained PyTorch model.** A multi-task MLP over 24 engineered features,
+  benchmarked against ridge regression and gradient boosting and ahead of both
+  on every rubric dimension (mean R² 0.548 vs 0.536 and 0.524).
+- **Model export for cheap serving.** The weights ship as a 36 KB NumPy file
+  whose predictions match PyTorch to four decimal places. That took the deploy
+  image from 3.35 GB to 810 MB and peak memory from 771 MB to 139 MB, small
+  enough for a 512 MB free tier.
+- **Measured, not assumed.** Embedding similarity was dropped from scoring after
+  calibration showed it can't separate on-topic from off-topic answers — in all
+  three models tested the ranges overlap. In a real spoken test it had cut a
+  reasonable answer's score by two thirds.
+- **Tested and typed.** 81 backend tests (graph, scoring, speech, LLM failover,
+  full HTTP lifecycle) and frontend unit tests, strict TypeScript and mypy. CI
+  migrates a real PostgreSQL and also runs the suite without PyTorch installed,
+  exactly as production runs.
+
 ## What's inside
 
 | | |
@@ -41,6 +73,17 @@ feedback that quotes what you actually said.
 | **Any LLM** | One `LLMProvider` interface with adapters for **Ollama** (local, GPU, no rate limits), **Groq** (hosted free tier) and **Claude** (highest quality). Switching is one environment variable. |
 | **Progress analytics** | **pandas** turns your history into a trend line with a rolling average, per-competency breakdowns, delivery metrics and a percentile against other candidates. |
 | **CV-aware questions** | Upload a CV (PDF, DOCX or text) and the interviewer asks about your real projects instead of generic ones. |
+
+## Tech stack
+
+| Layer | Technologies |
+|---|---|
+| **Frontend** | Vite, React 19, TypeScript (strict), Tailwind CSS v4, TanStack Query, React Router, Recharts, WebGL (OGL) |
+| **Backend** | Python 3.12, FastAPI, Pydantic v2, WebSockets, JWT authentication, structlog |
+| **Data** | PostgreSQL (Neon), SQLAlchemy 2.0 (async), Alembic, pandas, NumPy |
+| **AI / ML** | LangGraph, PyTorch, faster-whisper and Groq Whisper, sentence-transformers, Ollama · Groq · Claude |
+| **Infrastructure** | Docker (multi-stage builds), Docker Compose, GitHub Actions CI/CD, Render |
+| **Quality** | pytest, Vitest and Testing Library, Ruff, mypy, ESLint |
 
 ## Screenshots
 
@@ -145,7 +188,7 @@ Behavioural questions are generic and answers are specific stories — one good
 story answers several questions — so no threshold works. Off-topic answers are
 penalised by the rubric instead, whose anchors score them 0–39.
 
-### The PyTorch model, honestly
+### The PyTorch model: training and evaluation
 
 There is no public dataset of interview answers graded on this rubric, so the
 model is bootstrapped on a synthetic corpus with an explicit generative process
@@ -249,7 +292,7 @@ All settings are environment variables (see [`.env.example`](.env.example)).
 | `GROQ_API_KEY` | — | Groq free tier ([console.groq.com](https://console.groq.com/keys)) |
 | `GROQ_MODEL` | `openai/gpt-oss-120b` | `qwen/qwen3.8-27b` is ~2.5× faster with similar grading |
 | `GROQ_FALLBACK_MODELS` | `qwen/qwen3.8-27b,openai/gpt-oss-20b` | Groq limits tokens/min per model; on a 429 the provider fails over instantly instead of sleeping on `retry-after` |
-| `GROQ_REASONING_EFFORT` | `low` | gpt-oss only: ~70% fewer reasoning tokens, same grades (measured) |
+| `GROQ_REASONING_EFFORT` | `low` | gpt-oss only: ~60% fewer reasoning tokens, near-identical grades (measured) |
 | `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | `http://localhost:11434` / `qwen2.5:7b-instruct` | Local inference |
 | `DATABASE_URL` | built from `POSTGRES_*` | Takes precedence; `postgres://` URLs from Railway/Heroku are handled |
 | `JWT_SECRET` | dev value | **Required** in production — startup refuses the default |
@@ -271,7 +314,7 @@ There are two images, because the full ML runtime and free hosting don't mix.
 | Speech-to-text | faster-whisper in the container | Groq's hosted Whisper |
 | Scorer inference | PyTorch | NumPy, from exported weights |
 | Embeddings | yes | off (they're informational only) |
-| Image / RAM | 3.35 GB / ~1.5 GB | 810 MB / **~140 MB peak** |
+| Image / peak RAM | 3.35 GB / 771 MB | 810 MB / **139 MB** |
 | Fits | Railway, Cloud Run, a VM | **Render's free tier (512 MB)** |
 
 The lean image still uses PyTorch: a build stage trains the scorer and exports

@@ -1,4 +1,4 @@
-"""Claude provider — highest reasoning quality, used for the hosted demo.
+"""Claude provider — highest reasoning quality; the optional paid tier.
 
 Two things here are worth the vendor-specific code: adaptive thinking (better
 follow-up questions and more consistent rubric grading) and prompt caching on the

@@ -100,8 +100,8 @@ class Settings(BaseSettings):
     # Groq rate limits are per model, so on a 429 the provider fails over to
     # these immediately instead of sleeping on retry-after. Comma-separated.
     groq_fallback_models: str = "qwen/qwen3.8-27b,openai/gpt-oss-20b"
-    # Only sent to gpt-oss models: "low" cuts reasoning tokens ~70% with the
-    # same grades (measured), which matters on an 8k tokens/min free tier.
+    # Only sent to gpt-oss models: "low" cuts reasoning tokens ~60% with
+    # near-identical grades (measured), which matters on an 8k tokens/min free tier.
     groq_reasoning_effort: str = "low"
 
     ollama_base_url: str = "http://localhost:11434"

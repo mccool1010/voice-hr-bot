@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # ─── Lean deploy image: fits a free 512 MB host (Render free tier) ────────────
 # The full image carries PyTorch, local Whisper and an embedding model (~3 GB,
-# ~1.5 GB RAM). This one serves the same app with:
+# 771 MB peak RAM). This one serves the same app with:
 #   speech-to-text  Groq's hosted Whisper (same word timings)
 #   scorer          NumPy inference over weights exported from PyTorch
 #   embeddings      off (informational only; never part of the score)
