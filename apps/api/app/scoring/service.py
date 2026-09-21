@@ -7,8 +7,11 @@ Three signals are combined rather than trusting any one:
   model_score  the PyTorch MLP over engineered features. Captures structure and
                delivery, is deterministic, costs ~0.2 ms, and still works when
                the LLM call fails.
-  relevance    embedding similarity. Acts as a gate, not an addend — a fluent
-               answer to a different question should not score well.
+  relevance    question-answer embedding similarity. Recorded and shown, but
+               deliberately NOT part of the blend: ml/calibrate_relevance.py
+               shows it cannot separate on-topic from off-topic answers in
+               behavioural interviews (generic questions, specific stories).
+               Off-topic answers are penalised by the rubric's anchors instead.
 
 The weights below are the tuning surface. They live here as named constants
 rather than being scattered through the graph.
@@ -41,10 +44,6 @@ log = structlog.get_logger(__name__)
 W_LLM = 0.65
 W_MODEL = 0.35
 
-# Below this similarity an answer is treated as off-topic and heavily penalised.
-OFF_TOPIC_THRESHOLD = 0.15
-# Relevance at or above this point applies no penalty at all.
-FULL_CREDIT_RELEVANCE = 0.45
 
 _model: AnswerScorer | None = None
 _version: str = "untrained"
@@ -98,24 +97,6 @@ def _get_model() -> AnswerScorer | None:
         log.error("scorer.load_failed", error=str(exc))
         _model = None
     return _model
-
-
-def relevance_multiplier(relevance: float | None) -> float:
-    """Map similarity onto a 0.35-1.0 multiplier.
-
-    Linear between the off-topic threshold and full credit. Answers below the
-    threshold keep 35% of their score — enough that a poor embedding match on a
-    genuinely good answer is recoverable, harsh enough that answering a different
-    question is never a winning strategy.
-    """
-    if relevance is None:
-        return 1.0
-    if relevance >= FULL_CREDIT_RELEVANCE:
-        return 1.0
-    if relevance <= OFF_TOPIC_THRESHOLD:
-        return 0.35
-    span = FULL_CREDIT_RELEVANCE - OFF_TOPIC_THRESHOLD
-    return 0.35 + 0.65 * ((relevance - OFF_TOPIC_THRESHOLD) / span)
 
 
 def score_features_only(
@@ -215,7 +196,7 @@ async def score_answer(
 
     content = W_LLM * llm_score + W_MODEL * model_score if llm_score is not None else model_score
 
-    blended = float(np.clip(content * relevance_multiplier(similarity), 0.0, 100.0))
+    blended = float(np.clip(content, 0.0, 100.0))
 
     # Prefer the LLM's per-dimension judgement where available; the model's
     # predictions fill in the rest.

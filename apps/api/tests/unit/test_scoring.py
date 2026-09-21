@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
@@ -74,17 +73,31 @@ def test_predict_accepts_single_vector() -> None:
     assert out.shape == (1, len(TARGET_NAMES))
 
 
-@pytest.mark.parametrize(
-    ("relevance", "expected"),
-    [(None, 1.0), (0.9, 1.0), (0.45, 1.0), (0.05, 0.35), (0.15, 0.35)],
-)
-def test_relevance_multiplier_bounds(relevance: float | None, expected: float) -> None:
-    assert service.relevance_multiplier(relevance) == pytest.approx(expected)
+async def test_relevance_is_reported_but_never_changes_the_score(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: a relevance gate used to slash on-topic answers.
 
+    Calibration (ml/calibrate_relevance.py) showed question-answer similarity
+    overlaps almost completely between on- and off-topic answers, so it must
+    not feed the blend. It is still computed and returned for display.
+    """
+    answer = "I built the ingestion service in Kafka and cut lag by 80 percent."
 
-def test_relevance_multiplier_is_monotonic() -> None:
-    values = [service.relevance_multiplier(r) for r in np.linspace(0, 1, 50)]
-    assert all(b >= a for a, b in pairwise(values))
+    async def fake_relevance(question: str, answer: str) -> float:
+        return 0.0
+
+    monkeypatch.setattr(service.embeddings, "relevance", fake_relevance)
+    low = await service.score_answer(question="q", answer=answer, llm_scores={"overall": 80.0})
+
+    async def fake_high(question: str, answer: str) -> float:
+        return 0.9
+
+    monkeypatch.setattr(service.embeddings, "relevance", fake_high)
+    high = await service.score_answer(question="q", answer=answer, llm_scores={"overall": 80.0})
+
+    assert low.relevance == 0.0 and high.relevance == 0.9
+    assert low.blended_score == high.blended_score
 
 
 async def test_empty_answer_scores_zero() -> None:

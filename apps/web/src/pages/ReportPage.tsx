@@ -188,7 +188,7 @@ function TranscriptRow({ turn, number }: { turn: Turn; number: number }) {
             <SignalRow label="Rubric (LLM)" value={formatScore(score.llm_score)} />
             <SignalRow label="Delivery model (PyTorch)" value={formatScore(score.model_score)} />
             <SignalRow
-              label="On-topic similarity"
+              label="Question–answer similarity"
               value={score.relevance == null ? "—" : `${Math.round(score.relevance * 100)}%`}
             />
             {turn.transcription_confidence != null && (
@@ -198,8 +198,8 @@ function TranscriptRow({ turn, number }: { turn: Turn; number: number }) {
               />
             )}
             <p className="pt-1 text-xs text-faint">
-              The final score blends the rubric and delivery model, then scales down answers that
-              drift off the question.
+              The final score blends the rubric (65%) and the delivery model (35%). Similarity is
+              shown for context only.
             </p>
           </dl>
         </div>

@@ -421,7 +421,7 @@ function LiveScorecard({ history }: { history: ScoredAnswer[] }) {
             ))}
             {last.score.relevance != null && (
               <p className="text-xs text-faint">
-                On-topic: {Math.round(last.score.relevance * 100)}% similarity to the question
+                Question–answer similarity: {Math.round(last.score.relevance * 100)}%
               </p>
             )}
           </div>

@@ -92,7 +92,7 @@ class Settings(BaseSettings):
 
     # ─── Scoring ──────────────────────────────────────────────────────────────
     scorer_checkpoint: Path = Path("ml/artifacts/answer_scorer.pt")
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_model: str = "sentence-transformers/multi-qa-MiniLM-L6-cos-v1"
     embeddings_enabled: bool = True
 
     # ─── Uploads ──────────────────────────────────────────────────────────────

@@ -24,7 +24,7 @@ RUN mkdir -p app && touch app/__init__.py \
 # instead of downloading ~250 MB on the request path.
 FROM deps AS models
 ARG WHISPER_MODEL=base.en
-ARG EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+ARG EMBEDDING_MODEL=sentence-transformers/multi-qa-MiniLM-L6-cos-v1
 COPY app ./app
 COPY ml ./ml
 RUN python -m ml.generate_dataset --rows 8000 \

@@ -19,8 +19,8 @@ const FEATURES = [
   },
   {
     icon: BrainCircuit,
-    title: "Scored three ways",
-    body: "An LLM rubric, a PyTorch model over delivery features, and semantic relevance between question and answer — blended, not trusted blindly.",
+    title: "Scored on substance and delivery",
+    body: "An LLM grades what you said against a fixed rubric; a PyTorch model scores how you said it — structure, specifics, pace, pauses and filler words.",
   },
   {
     icon: ChartLine,
