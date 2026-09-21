@@ -1,390 +1,337 @@
-
-
-<h1 align="center">🎙️ Voice HR Bot</h1>
+<h1 align="center">🎙️ Voice HR</h1>
 
 <p align="center">
-  <strong>An AI-powered HR interview simulator with real-time voice interaction</strong>
+  <strong>Practise job interviews with an AI interviewer that listens, adapts, and scores every answer.</strong>
 </p>
 
 <p align="center">
-  <a href="#features"><img src="https://img.shields.io/badge/AI-Gemini_2.5_Flash-8E75B2?style=for-the-badge&logo=google&logoColor=white" alt="Gemini AI" /></a>
-  <a href="#tech-stack"><img src="https://img.shields.io/badge/Frontend-React_19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" /></a>
-  <a href="#tech-stack"><img src="https://img.shields.io/badge/Backend-Django_5.2-092E20?style=for-the-badge&logo=django&logoColor=white" alt="Django" /></a>
-  <a href="#tech-stack"><img src="https://img.shields.io/badge/Bundler-Vite_7-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" /></a>
+  <img src="https://img.shields.io/badge/React_19-TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="React + TypeScript" />
+  <img src="https://img.shields.io/badge/Tailwind-v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind" />
+  <img src="https://img.shields.io/badge/FastAPI-Pydantic_v2-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/PostgreSQL-SQLAlchemy_2-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/LangGraph-state_machine-1C3C3C?style=flat-square" alt="LangGraph" />
+  <img src="https://img.shields.io/badge/PyTorch-Whisper-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch" />
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
 </p>
 
 <p align="center">
-  Practice job interviews with an AI interviewer that <em>listens</em> to your voice, asks role-specific questions, and <em>speaks</em> responses back to you — all in a stunning glassmorphic UI with animated shader backgrounds.
+  <img src="docs/images/interview.png" alt="A live interview: the current question, the answer box, and a live scorecard" width="100%" />
 </p>
 
-
-
-
-## ✨ Features
-
-| Feature | Description |
-|---------|-------------|
-| 🎤 **Voice Input** | Speak your answers using the Web Speech API — no typing required |
-| 🔊 **Voice Output** | AI responses are spoken aloud via SpeechSynthesis for a realistic interview feel |
-| 🤖 **Gemini 2.5 Flash** | Powered by Google's latest AI model for intelligent, context-aware interview questions |
-| 💬 **Conversational Memory** | The AI remembers the full conversation context for follow-up questions |
-| 🎯 **Role-Specific** | Practice for any role — Data Scientist, Software Engineer, Product Manager, etc. |
-| 🎨 **Glassmorphic UI** | Stunning frosted-glass design with animated WebGL shader backgrounds (OGL) |
-| 🎙️ **Mic Selection** | Choose your preferred microphone from available audio input devices |
-| 📱 **Responsive** | Fully responsive design that works on desktop and mobile browsers |
-| ⚡ **Real-time** | Instant voice recognition and AI response with minimal latency |
+You pick a role, a level and an interviewer style. The interviewer plans an
+agenda, asks questions out loud, listens to your spoken answers, and follows up
+when an answer is thin — the way a real interviewer does. Every answer is scored
+by an LLM rubric and a PyTorch delivery model, and at the end you get written
+feedback that quotes what you actually said.
 
 ---
 
-## 🏗️ Architecture
+## What's inside
 
-<p align="center">
-  <img src="docs/images/architecture.png" alt="System Architecture" width="100%" />
-</p>
+| | |
+|---|---|
+| **Adaptive interviewer** | A [LangGraph](https://github.com/langchain-ai/langgraph) state machine plans the interview, asks each question, grades the answer, and decides whether to probe deeper or move on. State is checkpointed to PostgreSQL, so an interview survives a dropped connection or a page reload. |
+| **Server-side speech** | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) transcribes on the server, so voice works in every browser (v1 was Chrome-only). It also returns per-word timings, which feed pace, pause and hesitation analysis. |
+| **Two-model scoring** | An LLM grades each answer against a fixed rubric and a **PyTorch** model scores structure and delivery from engineered features. Embedding similarity is measured too — and deliberately kept out of the score, because calibration showed it can't tell on-topic answers from off-topic ones. |
+| **Any LLM** | One `LLMProvider` interface with adapters for **Ollama** (local, GPU, no rate limits), **Groq** (hosted free tier) and **Claude** (highest quality). Switching is one environment variable. |
+| **Progress analytics** | **pandas** turns your history into a trend line with a rolling average, per-competency breakdowns, delivery metrics and a percentile against other candidates. |
+| **CV-aware questions** | Upload a CV (PDF, DOCX or text) and the interviewer asks about your real projects instead of generic ones. |
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        FRONTEND (React + Vite)                  │
-│                                                                 │
-│  ┌──────────────┐   ┌──────────────┐   ┌─────────────────────┐ │
-│  │  Web Speech   │   │  OGL Shader  │   │   React UI          │ │
-│  │  Recognition  │   │  Background  │   │   (Glassmorphism)   │ │
-│  └──────┬───────┘   └──────────────┘   └──────────┬──────────┘ │
-│         │                                          │            │
-│         ▼                                          ▼            │
-│  ┌──────────────┐                       ┌─────────────────────┐ │
-│  │  Speech       │                       │  Axios HTTP Client  │ │
-│  │  Synthesis    │                       │  POST /api/chat/    │ │
-│  └──────────────┘                       └──────────┬──────────┘ │
-└────────────────────────────────────────────────────┼────────────┘
-                                                     │
-                                              REST API (JSON)
-                                                     │
-┌────────────────────────────────────────────────────┼────────────┐
-│                     BACKEND (Django REST Framework) │            │
-│                                                     ▼            │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  /api/chat/ endpoint                                      │   │
-│  │  ┌─────────────┐  ┌────────────────┐  ┌───────────────┐  │   │
-│  │  │ Parse Input  │→│ Session Memory │→│ Gemini 2.5     │  │   │
-│  │  │ (role + msg) │  │ (conversation) │  │ Flash API      │  │   │
-│  │  └─────────────┘  └────────────────┘  └───────┬───────┘  │   │
-│  │                                                │          │   │
-│  │                                    AI Response ◄┘          │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-```
+## Screenshots
+
+| Landing | Interview setup |
+|---|---|
+| <img src="docs/images/landing.png" alt="Landing page" /> | <img src="docs/images/setup.png" alt="Interview setup: role, level, interviewer persona, CV" /> |
+
+<img src="docs/images/dashboard.png" alt="Progress dashboard: score trend with rolling average, competency and rubric breakdowns" width="100%" />
 
 ---
 
-## 🛠️ Tech Stack
+## Architecture
 
-### Frontend
-| Technology | Version | Purpose |
-|-----------|---------|---------|
-| [React](https://react.dev/) | 19.1 | UI framework |
-| [Vite](https://vite.dev/) | 7.0 | Build tool & dev server |
-| [Axios](https://axios-http.com/) | 1.10 | HTTP client for API calls |
-| [OGL](https://github.com/oframe/ogl) | 1.0 | WebGL shader engine for animated background |
-| Web Speech API | Native | Browser-based speech recognition |
-| SpeechSynthesis | Native | Browser-based text-to-speech |
+```mermaid
+flowchart LR
+    subgraph Browser["Browser — React 19 · TypeScript · Tailwind"]
+        UI[Pages + TanStack Query]
+        MR[MediaRecorder]
+        TTS[SpeechSynthesis]
+    end
 
-### Backend
-| Technology | Version | Purpose |
-|-----------|---------|---------|
-| [Django](https://www.djangoproject.com/) | 5.2 | Web framework |
-| [Django REST Framework](https://www.django-rest-framework.org/) | Latest | REST API toolkit |
-| [Google Generative AI](https://ai.google.dev/) | Latest | Gemini 2.5 Flash integration |
-| [django-cors-headers](https://github.com/adamchainz/django-cors-headers) | Latest | CORS handling |
-| [WhiteNoise](http://whitenoise.evans.io/) | Latest | Static file serving |
-| [python-dotenv](https://github.com/theskumar/python-dotenv) | Latest | Environment variable management |
-| [Gunicorn](https://gunicorn.org/) | Latest | Production WSGI server |
+    subgraph API["FastAPI"]
+        REST[REST /api/v1]
+        WS[WebSocket /ws/interviews]
+        G[LangGraph interview graph]
+        W[Whisper STT]
+        S[Scoring service]
+        A[pandas analytics]
+    end
 
----
+    subgraph Scoring
+        F[Feature extraction<br/>NumPy · pandas]
+        M[PyTorch MLP]
+        E[QA embeddings<br/>informational]
+    end
 
-## 📁 Project Structure
+    LLM[(LLM provider<br/>Ollama · Groq · Claude)]
+    PG[(PostgreSQL<br/>domain tables +<br/>graph checkpoints)]
 
-```
-voice-hr-bot/
-├── 📂 frontend/                    # React + Vite application
-│   ├── 📂 public/                  # Static assets
-│   ├── 📂 src/
-│   │   ├── App.jsx                 # Main app — interview logic, voice I/O, UI
-│   │   ├── App.css                 # Glassmorphic styles & animations
-│   │   ├── index.css               # Global styles
-│   │   └── main.jsx                # React entry point
-│   ├── index.html                  # HTML template
-│   ├── package.json                # Dependencies & scripts
-│   ├── vite.config.js              # Vite configuration
-│   └── eslint.config.js            # Linting rules
-│
-├── 📂 backend/                     # Django REST API
-│   ├── 📂 api/                     # Main API app
-│   │   ├── views.py                # Chat endpoint — Gemini integration
-│   │   ├── urls.py                 # URL routing
-│   │   ├── models.py               # Data models (extensible)
-│   │   └── admin.py                # Django admin config
-│   ├── 📂 interviewsim/            # Django project settings
-│   │   ├── settings.py             # Configuration (CORS, API keys, etc.)
-│   │   ├── urls.py                 # Root URL configuration
-│   │   ├── wsgi.py                 # WSGI entry point
-│   │   └── asgi.py                 # ASGI entry point
-│   ├── .env                        # Environment variables (git-ignored)
-│   ├── manage.py                   # Django management CLI
-│   └── db.sqlite3                  # SQLite database
-│
-├── requirements.txt                # Python dependencies
-├── .gitattributes
-└── README.md                       # You are here! 👋
+    UI -- JSON --> REST
+    MR -- audio chunks --> WS
+    WS --> W --> G
+    REST --> G
+    G <--> LLM
+    G --> S --> F --> M
+    S --> E
+    G <--> PG
+    REST --> A --> PG
+    WS -- question / score / report --> UI
+    UI --> TTS
 ```
 
+### The interview graph
+
+```mermaid
+stateDiagram-v2
+    [*] --> plan
+    plan --> ask
+    plan --> report: planning failed
+    ask --> await_answer
+    await_answer --> evaluate: candidate answers (interrupt / resume)
+    evaluate --> advance
+    advance --> ask: probe deeper, or next topic
+    advance --> report: agenda finished
+    report --> [*]
+```
+
+- **plan** — the LLM writes an agenda of topics across competencies, grounded in the CV if there is one. Planning up front keeps the interview balanced; an LLM asked only for "the next question" drifts toward whatever you last mentioned.
+- **ask** — uses the planned question for a new topic, or generates a follow-up that reacts to what you just said.
+- **await_answer** — a LangGraph `interrupt`. The graph checkpoints and suspends until the answer arrives.
+- **evaluate** — rubric grading plus local scoring (below). Sets whether the answer is worth probing.
+- **advance** — probe the same topic (at most twice) or move on.
+- **report** — written feedback, strengths, improvements and one thing to practise next.
+
+### How an answer is scored
+
+| Signal | What it measures | Source |
+|---|---|---|
+| **Rubric** | Structure, specificity, clarity, depth — anchored bands from "poor" to "exceptional" | LLM with structured output |
+| **Delivery model** | STAR coverage, ownership (*I* vs *we*), concrete numbers, hedging, filler words, and — for spoken answers — pace, long pauses and silence | PyTorch MLP over 24 engineered features |
+| **Similarity** *(shown, not scored)* | Question–answer cosine similarity | QA-trained sentence embeddings |
+
+The score is `0.65 × rubric + 0.35 × delivery`. If the LLM call fails, the
+PyTorch model carries the score alone, so the interview never stalls.
+
+**Why similarity isn't in the score.** An earlier version multiplied the score
+by a relevance factor, assuming low question–answer similarity meant the
+candidate had drifted off topic. The first real spoken test disproved that: a
+perfectly reasonable answer scored 0.0 similarity and lost two thirds of its
+score. [`ml/calibrate_relevance.py`](apps/api/ml/calibrate_relevance.py)
+measures three embedding models on on-topic, other-question and unrelated
+answers, and in every one the ranges overlap:
+
+| Model | On-topic min | Other-question max | Unrelated max |
+|---|---|---|---|
+| all-MiniLM-L6-v2 | −0.008 | 0.431 | 0.208 |
+| multi-qa-MiniLM-L6-cos-v1 | 0.024 | 0.391 | 0.228 |
+| multi-qa-mpnet-base-cos-v1 | 0.023 | 0.396 | 0.209 |
+
+Behavioural questions are generic and answers are specific stories — one good
+story answers several questions — so no threshold works. Off-topic answers are
+penalised by the rubric instead, whose anchors score them 0–39.
+
+### The PyTorch model, honestly
+
+There is no public dataset of interview answers graded on this rubric, so the
+model is bootstrapped on a synthetic corpus with an explicit generative process
+(`apps/api/ml/generate_dataset.py`): sample a correlated latent quality vector,
+render it into answer text and simulated word timings, then re-extract features
+with the production extractor. The model never sees the latent vector, so it
+learns a genuine, lossy inverse mapping rather than an identity.
+
+Held-out results on 8,000 rows (`python -m ml.benchmark`):
+
+| Model | Mean R² | Overall R² |
+|---|---|---|
+| Ridge regression | 0.524 | 0.605 |
+| Gradient boosting | 0.536 | 0.615 |
+| **Multi-task MLP (shipped)** | **0.548** | **0.634** |
+
+The MLP beats both baselines on every dimension, but only narrowly — and a
+wider network overfits without gaining anything. That says the ceiling is the
+information in the features, not model capacity. Every scored answer stores its
+feature vector next to the LLM's rubric score, so the next step is retraining on
+real, LLM-graded answers.
+
 ---
 
-## 🚀 Getting Started
+## Quick start
 
-### Prerequisites
-
-- **Node.js** ≥ 18.x ([Download](https://nodejs.org/))
-- **Python** ≥ 3.10 ([Download](https://www.python.org/downloads/))
-- **Google Gemini API Key** ([Get one here](https://aistudio.google.com/apikey))
-
----
-
-### 1️⃣ Clone the Repository
+### Option 1 — Docker (everything in one command)
 
 ```bash
-git clone https://github.com/mccool1010/voice-hr-bot.git
-cd voice-hr-bot
+cp .env.example .env          # then set LLM_PROVIDER and a key (see below)
+docker compose up --build
 ```
 
----
+- App: <http://localhost:5173>
+- API docs: <http://localhost:8000/docs>
 
-### 2️⃣ Backend Setup
+Fully local with your own GPU and no API key:
 
 ```bash
-# Navigate to backend
-cd backend
-
-# Create and activate virtual environment
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-
-# macOS / Linux
-source venv/bin/activate
-
-# Install dependencies
-pip install -r ../requirements.txt
-
-# Create environment file
-echo GEMINI_API_KEY=your-google-gemini-api-key > .env
-echo SECRET_KEY=your-django-secret-key >> .env
-
-# Run database migrations
-python manage.py migrate
-
-# Start the development server
-python manage.py runserver
+# in .env: LLM_PROVIDER=ollama
+docker compose --profile ollama up --build
+docker compose exec ollama ollama pull qwen2.5:7b-instruct
 ```
 
-> 💡 The backend will be running at `http://localhost:8000`
+### Option 2 — Local development
 
----
-
-### 3️⃣ Frontend Setup
+**Prerequisites:** Python 3.12+, Node 22+, Docker (for PostgreSQL).
 
 ```bash
-# Open a new terminal, navigate to frontend
-cd frontend
+# Database
+docker run -d --name voicehr-pg -p 5432:5432 \
+  -e POSTGRES_USER=voicehr -e POSTGRES_PASSWORD=voicehr_dev_password -e POSTGRES_DB=voicehr \
+  postgres:16-alpine
 
-# Install dependencies
+# API
+cd apps/api
+python -m venv .venv
+.venv/Scripts/activate            # Windows   (macOS/Linux: source .venv/bin/activate)
+pip install -e ".[dev]"
+alembic upgrade head
+python -m ml.generate_dataset && python -m ml.train_scorer   # ~1 minute on CPU
+python -m app                     # http://localhost:8000
+
+# Web (second terminal)
+cd apps/web
 npm install
-
-# Start the development server
-npm run dev
+npm run dev                       # http://localhost:5173 — proxies /api and /ws
 ```
 
-> 💡 The frontend will be running at `http://localhost:5173`
+> `python -m app` rather than `uvicorn` directly: on Windows it switches asyncio
+> to the selector event loop that psycopg's async mode (used by the LangGraph
+> checkpointer) requires.
 
----
+**No LLM handy?** Set `LLM_PROVIDER=echo` to run the whole app offline. You get
+canned questions and scores from the local PyTorch model only.
 
-### 4️⃣ Start Practicing!
+**GPU acceleration:** `pip install -e .` pulls CPU PyTorch. For an NVIDIA GPU,
+reinstall torch from the CUDA index — RTX 50-series (Blackwell) cards need CUDA 12.8:
 
-1. Open `http://localhost:5173` in your browser (Chrome recommended for best speech support)
-2. Enter the job role you want to practice for (e.g., "Data Scientist")
-3. Select your microphone from the dropdown
-4. Click **🎤 Start Interview**
-5. Speak your answers — the AI will listen, respond, and ask follow-up questions!
-
----
-
-## 🔌 API Reference
-
-### `POST /api/chat/`
-
-Send a message to the AI interviewer and receive a response.
-
-**Request Body:**
-
-```json
-{
-  "message": "I have 3 years of experience in machine learning...",
-  "role": "Data Scientist"
-}
+```bash
+pip install --force-reinstall torch --index-url https://download.pytorch.org/whl/cu128
 ```
 
-**Success Response** — `200 OK`:
+Whisper then runs in `float16` on the GPU automatically.
 
-```json
-{
-  "reply": "That's great to hear! Can you walk me through a specific ML project you've worked on and the impact it had?"
-}
+---
+
+## Configuration
+
+All settings are environment variables (see [`.env.example`](.env.example)).
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LLM_PROVIDER` | `ollama` | `ollama`, `groq`, `anthropic`, or `echo` (offline) |
+| `ANTHROPIC_API_KEY` | — | Claude ([console.anthropic.com](https://console.anthropic.com/settings/keys)) |
+| `ANTHROPIC_MODEL` | `claude-opus-5` | Claude model; `ANTHROPIC_EFFORT` sets reasoning effort |
+| `GROQ_API_KEY` | — | Groq free tier ([console.groq.com](https://console.groq.com/keys)) |
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | |
+| `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | `http://localhost:11434` / `qwen2.5:7b-instruct` | Local inference |
+| `DATABASE_URL` | built from `POSTGRES_*` | Takes precedence; `postgres://` URLs from Railway/Heroku are handled |
+| `JWT_SECRET` | dev value | **Required** in production — startup refuses the default |
+| `WHISPER_MODEL` | `base.en` | Any faster-whisper size: `tiny.en` … `large-v3` |
+| `SPEECH_ENABLED` / `EMBEDDINGS_ENABLED` | `true` | Turn off to run lighter |
+
+If the configured provider can't be built (missing key or package), the API
+falls back through Claude → Groq → Ollama and reports which one is live at
+`/api/v1/health/ready`.
+
+---
+
+## Deployment
+
+The root [`Dockerfile`](Dockerfile) builds **one image** that serves the API,
+the WebSocket and the frontend from a single origin. The Whisper model, the
+embedding model and the trained scorer are baked in at build time, so a cold
+container answers its first request quickly. PostgreSQL is supplied through
+`DATABASE_URL`.
+
+**Railway** — create a project from this repo, add the PostgreSQL plugin (it sets
+`DATABASE_URL`), then set `JWT_SECRET` and `GROQ_API_KEY`. [`railway.json`](railway.json)
+configures the build and health check.
+
+**Hugging Face Spaces** — create a Docker Space, add a free
+[Neon](https://neon.tech) database, and set `DATABASE_URL`, `JWT_SECRET` and
+`GROQ_API_KEY` as Space secrets. The [deploy workflow](.github/workflows/deploy-hf.yml)
+pushes to the Space after CI passes, once you set the `HF_TOKEN` secret and the
+`HF_SPACE` variable.
+
+The landing page has a one-click demo account, so visitors can try it without
+signing up.
+
+---
+
+## Testing and CI
+
+```bash
+cd apps/api && pytest            # 56 tests: graph, scoring, analytics, full HTTP lifecycle
+cd apps/web && npm test          # session reducer, formatting, components
 ```
 
-**Error Responses:**
+The API suite runs the real compiled LangGraph, routers and services against
+SQLite and a deterministic in-process LLM, so it needs no network or GPU. It
+includes a regression test for enum values that come back as plain strings
+after a PostgreSQL checkpoint round-trip.
 
-| Status | Body | Cause |
-|--------|------|-------|
-| `429` | `{ "error": "Gemini API quota exceeded..." }` | API rate limit hit |
-| `500` | `{ "error": "Error description" }` | Server error |
+[GitHub Actions](.github/workflows/ci.yml) runs on every push and pull request:
 
----
-
-## 🌐 Deployment
-
-### Frontend → Netlify
-
-1. Push the `frontend/` directory to GitHub
-2. Import the repo on [Netlify](https://netlify.com/)
-3. Configure build settings:
-   - **Build command:** `npm run build`
-   - **Publish directory:** `dist`
-4. Deploy! 🚀
-
-### Backend → Render
-
-1. Push the `backend/` directory to GitHub
-2. Create a new **Web Service** on [Render](https://render.com/)
-3. Configure:
-   - **Build command:** `pip install -r requirements.txt`
-   - **Start command:** `gunicorn interviewsim.wsgi`
-4. Add environment variables:
-   - `GEMINI_API_KEY` = your API key
-   - `SECRET_KEY` = your Django secret key
-5. Deploy! 🚀
-
-> ⚠️ **Important:** Update the API URL in `App.jsx` (line 219) from `http://localhost:8000` to your deployed backend URL.
+- **API:** ruff, mypy, a migration round-trip on a real PostgreSQL service
+  (`upgrade → downgrade → upgrade → alembic check`), pytest with coverage, and a
+  smoke run of the ML pipeline (generate → train → load checkpoint).
+- **Web:** ESLint, TypeScript, Vitest, production build.
+- **Image:** builds the deploy image on pushes to `main`.
 
 ---
 
-## ⚙️ Environment Variables
+## Project structure
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GEMINI_API_KEY` | ✅ | Your Google Gemini API key from [AI Studio](https://aistudio.google.com/apikey) |
-| `SECRET_KEY` | ✅ | Django secret key for cryptographic signing |
-| `DEBUG` | ❌ | Set to `False` in production (default: `True`) |
+```
+apps/
+├── api/                      FastAPI service
+│   ├── app/
+│   │   ├── graph/            LangGraph state, nodes, contracts, builder
+│   │   ├── llm/              Provider protocol + Ollama / Groq / Claude / echo adapters
+│   │   ├── scoring/          Feature extraction, PyTorch model, embeddings, blending
+│   │   ├── speech/           Whisper transcription
+│   │   ├── analytics/        pandas aggregation for the dashboard
+│   │   ├── models/           SQLAlchemy 2.0 ORM
+│   │   ├── schemas/          Pydantic request/response models
+│   │   ├── routers/          REST + WebSocket endpoints
+│   │   └── services/         Glue between graph, database and storage
+│   ├── alembic/              Migrations
+│   ├── ml/                   Dataset generation, training, benchmark
+│   └── tests/
+└── web/                      React 19 + TypeScript + Tailwind v4
+    └── src/
+        ├── api/              Typed client and TanStack Query hooks
+        ├── features/         Auth context, interview session reducer
+        ├── hooks/            Recorder, speech synthesis, interview WebSocket
+        ├── components/       UI kit, charts, animated background
+        └── pages/
+Dockerfile                    Single-container deploy image
+docker-compose.yml            Local full stack (+ optional GPU Ollama)
+```
 
----
+## What changed from v1
 
-## 🎨 UI Highlights
+v1 was a Django app with a single endpoint that forwarded messages to Gemini.
+Its conversation history lived in a module-level global, so every user on the
+server shared one interview; nothing was saved; voice only worked in Chrome; and
+there were no tests. v2 is a rewrite: typed end to end, persistent, testable,
+provider-agnostic, and it actually evaluates answers instead of only chatting.
 
-- **DarkVeil Shader** — Custom CPPN-based WebGL shader using OGL for a mesmerizing animated background
-- **Glassmorphism** — Frosted glass cards with subtle blur and transparency
-- **Smooth Animations** — CSS keyframe animations for fade-in, slide-in effects
-- **Gradient Buttons** — Purple-to-blue gradient for primary actions, red-to-orange for destructive actions
-- **Responsive Design** — Adapts seamlessly from desktop to mobile viewports
+## License
 
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Here's how to get started:
-
-1. **Fork** the repository
-2. **Create** a feature branch:
-   ```bash
-   git checkout -b feature/amazing-feature
-   ```
-3. **Commit** your changes:
-   ```bash
-   git commit -m "feat: add amazing feature"
-   ```
-4. **Push** to the branch:
-   ```bash
-   git push origin feature/amazing-feature
-   ```
-5. Open a **Pull Request**
-
----
-
-## 📋 Roadmap
-
-- [ ] 🗂️ Interview history & session saving
-- [ ] 📊 Performance scoring & analytics
-- [ ] 🌍 Multi-language support
-- [ ] 📝 Text input mode as fallback
-- [ ] 🎭 Multiple interviewer personas
-- [ ] 📄 Resume upload for personalized questions
-- [ ] 🔐 User authentication & profiles
-
----
-
-## 🐛 Troubleshooting
-
-<details>
-<summary><strong>Microphone not working?</strong></summary>
-
-- Ensure your browser has microphone permission granted
-- Use **Chrome** or **Edge** for best Web Speech API support
-- Check that the correct microphone is selected in the dropdown
-- Firefox has limited SpeechRecognition support
-
-</details>
-
-<details>
-<summary><strong>API quota exceeded (429 error)?</strong></summary>
-
-- The free Gemini API tier has rate limits
-- Wait a few minutes and try again
-- Consider upgrading to a paid API plan for higher limits
-
-</details>
-
-<details>
-<summary><strong>CORS errors in the browser console?</strong></summary>
-
-- Ensure `django-cors-headers` is installed and configured
-- Verify `CORS_ALLOW_ALL_ORIGINS = True` is set in `settings.py`
-- For production, replace with `CORS_ALLOWED_ORIGINS` and list specific domains
-
-</details>
-
-<details>
-<summary><strong>Backend won't start?</strong></summary>
-
-- Make sure your virtual environment is activated
-- Verify `.env` file exists in the `backend/` directory with valid keys
-- Run `python manage.py migrate` before `runserver`
-
-</details>
-
----
-
-## 📄 License
-
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
-
----
-
-<p align="center">
-  Made with ❤️ by <a href="https://github.com/mccool1010">mccool1010</a>
-</p>
-
-<p align="center">
-  <a href="https://github.com/mccool1010/voice-hr-bot/stargazers">⭐ Star this repo</a> •
-  <a href="https://github.com/mccool1010/voice-hr-bot/issues">🐛 Report Bug</a> •
-  <a href="https://github.com/mccool1010/voice-hr-bot/issues">💡 Request Feature</a>
-</p>
+MIT

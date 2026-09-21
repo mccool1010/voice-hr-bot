@@ -1,0 +1,76 @@
+# Local full stack:  docker compose up --build
+#   web  → http://localhost:5173   (nginx serving the SPA, proxying the API)
+#   api  → http://localhost:8000/docs
+#
+# Pick the LLM in .env (LLM_PROVIDER=ollama|groq|anthropic). For a fully local
+# setup with your GPU, add the Ollama service:  docker compose --profile ollama up
+
+name: voice-hr
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-voicehr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-voicehr_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-voicehr}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_HOST: db
+      CORS_ORIGINS: http://localhost:5173
+      # Inside Compose, Ollama is reachable by service name, not localhost.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/app/storage
+
+  web:
+    build:
+      context: ./apps/web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  pgdata:
+  uploads:
+  ollama:
