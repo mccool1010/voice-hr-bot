@@ -15,7 +15,12 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/interview.png" alt="A live interview: the current question, the answer box, and a live scorecard" width="100%" />
+  <a href="https://voice-hr.onrender.com"><strong>▶ Try the live demo</strong></a> — one click, no sign-up
+  <br /><sub>Free hosting: the first visit after a quiet spell takes about a minute to wake.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/interview.png" alt="A live interview: an adaptive follow-up question, the answer box, and a live rubric scorecard" width="100%" />
 </p>
 
 You pick a role, a level and an interviewer style. The interviewer plans an
@@ -42,8 +47,9 @@ feedback that quotes what you actually said.
 | Landing | Interview setup |
 |---|---|
 | <img src="docs/images/landing.png" alt="Landing page" /> | <img src="docs/images/setup.png" alt="Interview setup: role, level, interviewer persona, CV" /> |
+| **Answering by voice** | **Progress dashboard** |
+| <img src="docs/images/interview-voice.png" alt="Voice answer mode with the question being read aloud" /> | <img src="docs/images/dashboard.png" alt="Progress dashboard" /> |
 
-<img src="docs/images/dashboard.png" alt="Progress dashboard: score trend with rolling average, competency and rubric breakdowns" width="100%" />
 
 ---
 
