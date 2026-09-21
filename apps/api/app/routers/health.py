@@ -49,9 +49,19 @@ async def readiness(db: DbSession, response: Response) -> dict[str, Any]:
         checks["llm"] = {"ok": False, "error": str(exc)[:200]}
 
     # Degraded-but-serving: the app still works without these.
-    checks["speech"] = {"ok": transcribe.is_available(), "model": settings.whisper_model}
+    hosted = settings.speech_provider == "groq"
+    checks["speech"] = {
+        "ok": transcribe.is_available(),
+        "provider": settings.speech_provider.value,
+        "model": settings.groq_whisper_model if hosted else settings.whisper_model,
+        "device": transcribe.device(),
+    }
     checks["embeddings"] = {"ok": embeddings.is_available(), "model": settings.embedding_model}
-    checks["scorer"] = {"ok": scoring.is_trained(), "version": scoring.version()}
+    checks["scorer"] = {
+        "ok": scoring.is_trained(),
+        "version": scoring.version(),
+        "backend": scoring.backend(),
+    }
 
     hard_dependencies_ok = checks["database"]["ok"] and checks["llm"]["ok"]
     if not hard_dependencies_ok:

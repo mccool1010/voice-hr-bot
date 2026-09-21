@@ -20,7 +20,7 @@ from app.llm.base import BaseLLMProvider, ChatMessage, LLMError, LLMUnavailableE
 class GroqProvider(BaseLLMProvider):
     name = "groq"
 
-    def __init__(self, api_key: str, model: str = "llama-3.3-70b-versatile") -> None:
+    def __init__(self, api_key: str, model: str = "openai/gpt-oss-120b") -> None:
         try:
             from groq import AsyncGroq
         except ImportError as exc:  # pragma: no cover

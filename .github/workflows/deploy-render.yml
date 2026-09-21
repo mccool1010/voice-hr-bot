@@ -1,0 +1,29 @@
+name: Deploy to Render
+
+# Redeploys the lean image on Render after CI passes on main.
+# Repo setup: secret RENDER_API_KEY, and variable RENDER_DEPLOY=true.
+# The service itself is created once with deploy/render/deploy.py.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: >-
+      vars.RENDER_DEPLOY == 'true' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install httpx
+      - name: Deploy and wait until live
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: python deploy/render/deploy.py --deploy-only

@@ -17,7 +17,7 @@ FROM base AS deps
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 COPY pyproject.toml ./
 RUN mkdir -p app && touch app/__init__.py \
- && pip install --extra-index-url ${TORCH_INDEX} .
+ && pip install --extra-index-url ${TORCH_INDEX} ".[ml]"
 
 # ─── Model artefacts: train the scorer, pre-fetch Whisper + embeddings ───────
 # Baked into the image so a cold container serves its first request quickly

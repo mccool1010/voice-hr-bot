@@ -20,7 +20,8 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from app.config import settings
+from app.config import SpeechProviderName, settings
+from app.speech import groq_whisper
 
 if TYPE_CHECKING:
     from faster_whisper import WhisperModel
@@ -131,12 +132,20 @@ def _load_cpu() -> WhisperModel | None:
 
 
 def device() -> str | None:
-    """Where Whisper is running, once loaded."""
-    return _device
+    """Where Whisper is running: "groq", "cuda", "cpu", or None before loading."""
+    return "groq" if _hosted() else _device
+
+
+def _hosted() -> bool:
+    return settings.speech_provider == SpeechProviderName.groq
 
 
 def is_available() -> bool:
-    return settings.speech_enabled and not _load_failed
+    if not settings.speech_enabled:
+        return False
+    if _hosted():
+        return groq_whisper.is_configured()
+    return not _load_failed
 
 
 def _run(model: WhisperModel, audio_path: str, language: str | None) -> Transcript:
@@ -213,11 +222,18 @@ def transcribe_sync(audio_path: str, *, language: str | None = "en") -> Transcri
 
 
 async def transcribe(audio_path: str, *, language: str | None = "en") -> Transcript:
+    if _hosted():
+        try:
+            result = await groq_whisper.transcribe(audio_path, language=language)
+        except groq_whisper.GroqSpeechError as exc:
+            raise TranscriptionError(str(exc)) from exc
+        return Transcript(**result)
     return await asyncio.to_thread(transcribe_sync, audio_path, language=language)
 
 
 async def warmup() -> None:
-    if settings.speech_enabled:
+    # Hosted speech has nothing to load.
+    if settings.speech_enabled and not _hosted():
         await asyncio.to_thread(_load)
 
 

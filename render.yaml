@@ -1,0 +1,21 @@
+# Render Blueprint — the free-tier deploy of the lean image.
+# Dashboard: New → Blueprint → pick this repo. Render asks for the two
+# `sync: false` values; JWT_SECRET is generated for you.
+# Or fully scripted: deploy/render/deploy.py (uses the Render API).
+services:
+  - type: web
+    name: voice-hr
+    runtime: docker
+    plan: free
+    # Same AWS region as the Neon database (us-east-1): ~1 ms round-trips.
+    region: virginia
+    dockerfilePath: ./deploy/render/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true

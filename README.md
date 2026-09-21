@@ -31,7 +31,7 @@ feedback that quotes what you actually said.
 | | |
 |---|---|
 | **Adaptive interviewer** | A [LangGraph](https://github.com/langchain-ai/langgraph) state machine plans the interview, asks each question, grades the answer, and decides whether to probe deeper or move on. State is checkpointed to PostgreSQL, so an interview survives a dropped connection or a page reload. |
-| **Server-side speech** | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) transcribes on the server, so voice works in every browser (v1 was Chrome-only). It also returns per-word timings, which feed pace, pause and hesitation analysis. |
+| **Server-side speech** | Whisper transcribes on the server — locally with [faster-whisper](https://github.com/SYSTRAN/faster-whisper), or via Groq's hosted Whisper in the lean deploy — so voice works in every browser (v1 was Chrome-only). Per-word timings feed pace, pause and hesitation analysis. |
 | **Two-model scoring** | An LLM grades each answer against a fixed rubric and a **PyTorch** model scores structure and delivery from engineered features. Embedding similarity is measured too — and deliberately kept out of the score, because calibration showed it can't tell on-topic answers from off-topic ones. |
 | **Any LLM** | One `LLMProvider` interface with adapters for **Ollama** (local, GPU, no rate limits), **Groq** (hosted free tier) and **Claude** (highest quality). Switching is one environment variable. |
 | **Progress analytics** | **pandas** turns your history into a trend line with a rolling average, per-competency breakdowns, delivery metrics and a percentile against other candidates. |
@@ -198,7 +198,7 @@ docker run -d --name voicehr-pg -p 5432:5432 \
 cd apps/api
 python -m venv .venv
 .venv/Scripts/activate            # Windows   (macOS/Linux: source .venv/bin/activate)
-pip install -e ".[dev]"
+pip install -e ".[ml,dev]"        # [ml] = PyTorch, local Whisper, embeddings
 alembic upgrade head
 python -m ml.generate_dataset && python -m ml.train_scorer   # ~1 minute on CPU
 python -m app                     # http://localhost:8000
@@ -241,7 +241,7 @@ All settings are environment variables (see [`.env.example`](.env.example)).
 | `ANTHROPIC_API_KEY` | — | Claude ([console.anthropic.com](https://console.anthropic.com/settings/keys)) |
 | `ANTHROPIC_MODEL` | `claude-opus-5` | Claude model; `ANTHROPIC_EFFORT` sets reasoning effort |
 | `GROQ_API_KEY` | — | Groq free tier ([console.groq.com](https://console.groq.com/keys)) |
-| `GROQ_MODEL` | `llama-3.3-70b-versatile` | |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | `qwen/qwen3.8-27b` is ~2.5× faster with similar grading |
 | `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | `http://localhost:11434` / `qwen2.5:7b-instruct` | Local inference |
 | `DATABASE_URL` | built from `POSTGRES_*` | Takes precedence; `postgres://` URLs from Railway/Heroku are handled |
 | `JWT_SECRET` | dev value | **Required** in production — startup refuses the default |
@@ -256,29 +256,44 @@ falls back through Claude → Groq → Ollama and reports which one is live at
 
 ## Deployment
 
-The root [`Dockerfile`](Dockerfile) builds **one image** that serves the API,
-the WebSocket and the frontend from a single origin. The Whisper model, the
-embedding model and the trained scorer are baked in at build time, so a cold
-container answers its first request quickly. PostgreSQL is supplied through
-`DATABASE_URL`.
+There are two images, because the full ML runtime and free hosting don't mix.
 
-**Railway** — create a project from this repo, add the PostgreSQL plugin (it sets
-`DATABASE_URL`), then set `JWT_SECRET` and `GROQ_API_KEY`. [`railway.json`](railway.json)
-configures the build and health check.
+| | [`Dockerfile`](Dockerfile) (full) | [`deploy/render/Dockerfile`](deploy/render/Dockerfile) (lean) |
+|---|---|---|
+| Speech-to-text | faster-whisper in the container | Groq's hosted Whisper |
+| Scorer inference | PyTorch | NumPy, from exported weights |
+| Embeddings | yes | off (they're informational only) |
+| Image / RAM | 3.35 GB / ~1.5 GB | 810 MB / **~140 MB peak** |
+| Fits | Railway, Cloud Run, a VM | **Render's free tier (512 MB)** |
 
-**Hugging Face Spaces** (free) — with a [Neon](https://neon.tech) database
-(turn connection pooling off) and a [Groq](https://console.groq.com/keys) key:
+The lean image still uses PyTorch: a build stage trains the scorer and exports
+its weights to a 36 KB `.npz`, and only that ships. The NumPy forward pass
+matches the PyTorch one to four decimal places (`tests/unit/test_numpy_model.py`),
+and CI runs the whole test suite in a PyTorch-free install to keep that path honest.
+Groq's Whisper returns the same per-word timings as local Whisper, so the pace
+and pause features are identical.
+
+**Render (free)** — with a [Neon](https://neon.tech) database (region AWS US
+East, connection pooling off) and a [Groq](https://console.groq.com/keys) key:
 
 ```bash
-pip install huggingface_hub
-HF_TOKEN=... DATABASE_URL=... GROQ_API_KEY=... JWT_SECRET=...   python deploy/huggingface/deploy.py --space <user>/voice-hr --set-secrets
+RENDER_API_KEY=... DATABASE_URL=... GROQ_API_KEY=... python deploy/render/deploy.py
 ```
 
-That creates the Space, stores the secrets, and uploads only git-tracked files.
-After that, the [deploy workflow](.github/workflows/deploy-hf.yml) redeploys on
-every green CI run on `main`, once the repo has an `HF_TOKEN` secret and an
-`HF_SPACE` variable. Hosted Postgres URLs work as-is: `sslmode` and other libpq
-options are translated for asyncpg automatically.
+That creates the service in Render's Virginia region (next to Neon's us-east-1),
+sets its environment, generates `JWT_SECRET`, deploys and waits until it's live.
+After that, [deploy-render.yml](.github/workflows/deploy-render.yml) redeploys
+after every green CI run on `main`, once the repo has a `RENDER_API_KEY` secret
+and `RENDER_DEPLOY=true` variable. Prefer clicking? [`render.yaml`](render.yaml)
+is a Blueprint: New → Blueprint → this repo.
+
+Free-tier services sleep after 15 minutes idle; the first visit after that takes
+about a minute to wake. Hosted Postgres URLs work as-is — `sslmode` and other
+libpq options are translated for asyncpg automatically.
+
+**Full image elsewhere** — [`railway.json`](railway.json) configures Railway, and
+[`deploy/huggingface/deploy.py`](deploy/huggingface/deploy.py) deploys to a
+Hugging Face Docker Space (Docker Spaces now require HF PRO).
 
 The landing page has a one-click demo account, so visitors can try it without
 signing up.
@@ -288,7 +303,7 @@ signing up.
 ## Testing and CI
 
 ```bash
-cd apps/api && pytest            # 68 tests: graph, scoring, speech, config, analytics, HTTP lifecycle
+cd apps/api && pytest            # 76 tests: graph, scoring, speech, config, analytics, HTTP lifecycle
 cd apps/web && npm test          # session reducer, formatting, components
 ```
 
@@ -299,11 +314,12 @@ after a PostgreSQL checkpoint round-trip.
 
 [GitHub Actions](.github/workflows/ci.yml) runs on every push and pull request:
 
+- **API (lean):** the test suite in an install without PyTorch, as deployed.
 - **API:** ruff, mypy, a migration round-trip on a real PostgreSQL service
   (`upgrade → downgrade → upgrade → alembic check`), pytest with coverage, and a
   smoke run of the ML pipeline (generate → train → load checkpoint).
 - **Web:** ESLint, TypeScript, Vitest, production build.
-- **Image:** builds the deploy image on pushes to `main`.
+- **Images:** builds both the full and the lean deploy images on pushes to `main`.
 
 ---
 

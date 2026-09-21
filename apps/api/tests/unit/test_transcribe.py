@@ -14,6 +14,8 @@ import pytest
 
 from app.speech import transcribe
 
+pytest.importorskip("faster_whisper")
+
 
 def _segment(text: str) -> SimpleNamespace:
     words = [

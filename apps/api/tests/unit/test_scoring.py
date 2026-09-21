@@ -6,7 +6,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import torch
+
+torch = pytest.importorskip("torch")
 
 from app.scoring import service
 from app.scoring.features import FEATURE_NAMES, N_FEATURES

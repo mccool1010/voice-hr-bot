@@ -31,7 +31,7 @@ from app.models.interview import Interview, Turn
 from app.models.resume import Resume
 from app.models.score import InterviewReport, TurnScore
 from app.models.user import User
-from app.scoring.model import SCORER_VERSION
+from app.scoring.spec import SCORER_VERSION
 
 log = structlog.get_logger(__name__)
 

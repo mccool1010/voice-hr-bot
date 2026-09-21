@@ -20,9 +20,10 @@ rather than being scattered through the graph.
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 import structlog
@@ -30,22 +31,35 @@ import structlog
 from app.config import settings
 from app.scoring import embeddings
 from app.scoring.features import extract_features, features_to_vector
-from app.scoring.model import (
-    SCORER_VERSION,
-    TARGET_NAMES,
-    AnswerScorer,
-    load_scorer,
-    predict,
-)
+from app.scoring.spec import SCORER_VERSION, TARGET_NAMES
 
 log = structlog.get_logger(__name__)
 
-# Blend weights, applied to the content signals before the relevance gate.
+# Blend weights for the two content signals.
 W_LLM = 0.65
 W_MODEL = 0.35
 
 
-_model: AnswerScorer | None = None
+class Predictor(Protocol):
+    """Anything that maps feature vectors to per-target scores in 0-100."""
+
+    def predict(self, vectors: np.ndarray) -> np.ndarray: ...
+
+
+class _TorchPredictor:
+    """Adapter so the PyTorch model and the NumPy export share one interface."""
+
+    def __init__(self, model: Any) -> None:
+        self._model = model
+
+    def predict(self, vectors: np.ndarray) -> np.ndarray:
+        from app.scoring.model import predict
+
+        return predict(self._model, vectors)
+
+
+_model: Predictor | None = None
+_backend: str | None = None
 _version: str = "untrained"
 _load_attempted = False
 
@@ -69,34 +83,59 @@ class ScoreResult:
         return asdict(self)
 
 
-def _get_model() -> AnswerScorer | None:
-    """Lazy-load the checkpoint. An untrained deployment degrades, it does not crash."""
-    global _model, _version, _load_attempted
+def _checkpoint_path() -> Path:
+    path = Path(settings.scorer_checkpoint)
+    return path if path.is_absolute() else Path(__file__).resolve().parents[2] / path
+
+
+def _get_model() -> Predictor | None:
+    """Lazy-load the scorer. An untrained deployment degrades, it does not crash.
+
+    Prefers the PyTorch checkpoint when torch is installed (local development),
+    and otherwise serves the NumPy export (the lean deploy image, which has no
+    torch). Both produce the same predictions; see tests/unit/test_numpy_model.py.
+    """
+    global _model, _backend, _version, _load_attempted
 
     if _model is not None or _load_attempted:
         return _model
-
     _load_attempted = True
-    path = Path(settings.scorer_checkpoint)
-    if not path.is_absolute():
-        path = Path(__file__).resolve().parents[2] / path
 
-    if not path.exists():
-        log.warning(
-            "scorer.checkpoint_missing",
-            path=str(path),
-            hint="run: python -m ml.train_scorer",
-        )
-        return None
+    pt_path = _checkpoint_path()
+    npz_path = pt_path.with_suffix(".npz")
 
-    try:
-        _model, checkpoint = load_scorer(path)
-        _version = checkpoint.version
-        log.info("scorer.loaded", version=_version, metrics=checkpoint.metrics)
-    except Exception as exc:
-        log.error("scorer.load_failed", error=str(exc))
-        _model = None
-    return _model
+    if pt_path.exists() and importlib.util.find_spec("torch") is not None:
+        try:
+            from app.scoring.model import load_scorer
+
+            model, checkpoint = load_scorer(pt_path)
+            _model, _backend, _version = _TorchPredictor(model), "torch", checkpoint.version
+            log.info("scorer.loaded", backend="torch", version=_version, metrics=checkpoint.metrics)
+            return _model
+        except Exception as exc:
+            log.error("scorer.load_failed", backend="torch", error=str(exc))
+
+    if npz_path.exists():
+        try:
+            from app.scoring.numpy_model import NumpyScorer
+
+            scorer = NumpyScorer.load(npz_path)
+            _model, _backend, _version = scorer, "numpy", scorer.version
+            log.info("scorer.loaded", backend="numpy", version=_version, metrics=scorer.metrics)
+            return _model
+        except Exception as exc:
+            log.error("scorer.load_failed", backend="numpy", error=str(exc))
+
+    log.warning(
+        "scorer.checkpoint_missing", path=str(pt_path), hint="run: python -m ml.train_scorer"
+    )
+    return None
+
+
+def backend() -> str | None:
+    """ "torch", "numpy", or None when running on the heuristic fallback."""
+    _get_model()
+    return _backend
 
 
 def score_features_only(
@@ -119,7 +158,7 @@ def score_features_only(
         return features, _heuristic_scores(features)
 
     vector = features_to_vector(features)
-    predictions = predict(model, vector)[0]
+    predictions = model.predict(vector)[0]
     return features, {
         name: float(np.clip(value, 0.0, 100.0))
         for name, value in zip(TARGET_NAMES, predictions, strict=True)
@@ -237,7 +276,8 @@ def warmup() -> None:
 
 def reset() -> None:
     """Test hook."""
-    global _model, _load_attempted, _version
+    global _model, _backend, _load_attempted, _version
     _model = None
+    _backend = None
     _load_attempted = False
     _version = "untrained"

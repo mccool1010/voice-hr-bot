@@ -39,10 +39,10 @@ def _register_sqlite_jsonb() -> None:
 
 _register_sqlite_jsonb()
 
-from app.db.base import Base  # noqa: E402
-from app.db.session import get_db  # noqa: E402
-from app.llm import EchoProvider, set_provider  # noqa: E402
-from app.models import User  # noqa: E402  — registers tables
+from app.db.base import Base
+from app.db.session import get_db
+from app.llm import EchoProvider, set_provider
+from app.models import User
 
 
 @pytest.fixture(scope="session")

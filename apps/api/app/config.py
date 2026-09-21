@@ -29,6 +29,17 @@ class Environment(StrEnum):
     production = "production"
 
 
+class SpeechProviderName(StrEnum):
+    """Where speech-to-text runs.
+
+    local — faster-whisper in-process (CPU or GPU). Default; no network needed.
+    groq  — Groq's hosted Whisper. For small deploy images with no local model.
+    """
+
+    local = "local"
+    groq = "groq"
+
+
 class LLMProviderName(StrEnum):
     """Which LLM backend serves interview turns.
 
@@ -85,13 +96,15 @@ class Settings(BaseSettings):
     anthropic_effort: str = "high"
 
     groq_api_key: str | None = None
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-120b"
 
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:7b-instruct"
 
     # ─── Speech ───────────────────────────────────────────────────────────────
+    speech_provider: SpeechProviderName = SpeechProviderName.local
     whisper_model: str = "base.en"
+    groq_whisper_model: str = "whisper-large-v3-turbo"
     whisper_device: str = "auto"
     whisper_compute_type: str = "default"
     speech_enabled: bool = True

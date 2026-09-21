@@ -24,7 +24,7 @@ WORKDIR /app
 FROM base AS deps
 COPY apps/api/pyproject.toml ./
 RUN mkdir -p app && touch app/__init__.py \
- && pip install --extra-index-url https://download.pytorch.org/whl/cpu .
+ && pip install --extra-index-url https://download.pytorch.org/whl/cpu ".[ml]"
 
 # ─── Models: train the scorer, pre-fetch Whisper + embeddings ────────────────
 FROM deps AS models

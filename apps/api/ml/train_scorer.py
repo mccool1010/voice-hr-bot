@@ -35,6 +35,7 @@ from app.scoring.model import (
     TARGET_NAMES,
     AnswerScorer,
     ScorerCheckpoint,
+    export_numpy,
 )
 
 DEFAULT_DATA = Path("ml/data/synthetic.parquet")
@@ -214,18 +215,22 @@ def main() -> None:
     print(f"  {'mean R2':<12}  {metrics['r2_mean']:6.3f}")
 
     model.cpu()
-    ScorerCheckpoint(
+    checkpoint = ScorerCheckpoint(
         state_dict={k: v.cpu() for k, v in model.state_dict().items()},
         version=SCORER_VERSION,
         feature_names=FEATURE_NAMES,
         target_names=TARGET_NAMES,
         metrics=metrics,
         trained_at=datetime.now(UTC).isoformat(),
-    ).save(args.out)
+    )
+    checkpoint.save(args.out)
+    # Torch-free copy for the lean deploy image, which serves with NumPy only.
+    npz_path = export_numpy(model, checkpoint, args.out.with_suffix(".npz"))
 
     metrics_path = args.out.with_suffix(".metrics.json")
     metrics_path.write_text(json.dumps(metrics, indent=2))
     print(f"\nSaved checkpoint to {args.out}")
+    print(f"Saved NumPy export to {npz_path}")
     print(f"Saved metrics to {metrics_path}")
 
 

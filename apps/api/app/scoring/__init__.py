@@ -7,15 +7,14 @@ from app.scoring.features import (
     extract_features,
     features_to_vector,
 )
-from app.scoring.model import SCORER_VERSION, TARGET_NAMES, AnswerScorer
 from app.scoring.service import ScoreResult, is_trained, score_answer, version
+from app.scoring.spec import SCORER_VERSION, TARGET_NAMES
 
 __all__ = [
     "FEATURE_NAMES",
     "N_FEATURES",
     "SCORER_VERSION",
     "TARGET_NAMES",
-    "AnswerScorer",
     "ScoreResult",
     "extract_batch",
     "extract_features",

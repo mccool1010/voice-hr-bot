@@ -23,12 +23,18 @@ import torch
 from torch import nn
 
 from app.scoring.features import FEATURE_NAMES, N_FEATURES
+from app.scoring.spec import N_TARGETS, SCORER_VERSION, TARGET_NAMES
 
-SCORER_VERSION = "mlp-v1"
-
-# Order matters: it defines the output column layout of the network.
-TARGET_NAMES: tuple[str, ...] = ("structure", "specificity", "clarity", "depth", "overall")
-N_TARGETS = len(TARGET_NAMES)
+__all__ = [
+    "N_TARGETS",
+    "SCORER_VERSION",
+    "TARGET_NAMES",
+    "AnswerScorer",
+    "ScorerCheckpoint",
+    "export_numpy",
+    "load_scorer",
+    "predict",
+]
 
 
 class AnswerScorer(nn.Module):
@@ -139,3 +145,26 @@ def predict(model: AnswerScorer, vectors: np.ndarray) -> np.ndarray:
     if tensor.ndim == 1:
         tensor = tensor.unsqueeze(0)
     return model(tensor.to(next(model.parameters()).device)).cpu().numpy()
+
+
+def export_numpy(model: AnswerScorer, checkpoint: ScorerCheckpoint, path: Path) -> Path:
+    """Write the weights as an .npz that `NumpyScorer` can serve without torch."""
+    from app.scoring.numpy_model import NumpyScorer
+
+    state = {k: v.detach().cpu().numpy().astype(np.float64) for k, v in model.state_dict().items()}
+    heads = sorted({k.split(".")[1] for k in state if k.startswith("heads.")}, key=int)
+    NumpyScorer(
+        mean=state["feature_mean"],
+        std=state["feature_std"],
+        w1=state["trunk.0.weight"],
+        b1=state["trunk.0.bias"],
+        w2=state["trunk.3.weight"],
+        b2=state["trunk.3.bias"],
+        heads_w=np.concatenate([state[f"heads.{i}.weight"] for i in heads], axis=0),
+        heads_b=np.concatenate([state[f"heads.{i}.bias"] for i in heads], axis=0),
+        version=checkpoint.version,
+        feature_names=tuple(checkpoint.feature_names),
+        target_names=tuple(checkpoint.target_names),
+        metrics=checkpoint.metrics,
+    ).save(path)
+    return path

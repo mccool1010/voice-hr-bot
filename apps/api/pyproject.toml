@@ -33,14 +33,9 @@ dependencies = [
     "groq>=0.18",
     "httpx>=0.28",
 
-    # Data / ML
+    # Data — the scorer serves from NumPy, analytics use pandas
     "numpy>=2.0",
     "pandas>=2.2",
-    "torch>=2.6",
-    "sentence-transformers>=3.4",
-
-    # Speech
-    "faster-whisper>=1.1",
 
     # Documents
     "pypdf>=5.3",
@@ -51,6 +46,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Local ML runtime: training, PyTorch inference, local Whisper, embeddings.
+# The lean deploy image omits these (~2 GB) and uses Groq's Whisper and the
+# NumPy export of the scorer instead. Install with: pip install -e ".[ml,dev]"
+ml = [
+    "torch>=2.6",
+    "sentence-transformers>=3.4",
+    "faster-whisper>=1.1",
+]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
@@ -79,7 +82,7 @@ select = ["E", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF", "ASYNC"]
 ignore = ["B008", "N818", "UP046", "UP047"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "E501"]
+"tests/*" = ["S101", "E501", "E402"]  # E402: imports after pytest.importorskip
 "alembic/*" = ["E501"]
 
 [tool.mypy]
