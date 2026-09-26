@@ -297,3 +297,23 @@ async def test_health_and_capabilities(app_client: AsyncClient) -> None:
     assert (await app_client.get("/api/v1/health")).json()["status"] == "ok"
     caps = (await app_client.get("/api/v1/capabilities")).json()
     assert caps["llm"]["provider"] == "echo"
+
+
+async def test_turns_report_filler_words(app_client, auth_headers, echo_llm) -> None:  # type: ignore[no-untyped-def]
+    """Each answered turn lists the fillers heard, including "like" used as a filler."""
+    _script_plan(echo_llm, topics=1)
+    created = await app_client.post(
+        "/api/v1/interviews",
+        json={"role": "Data Analyst", "seniority": "junior", "target_questions": 3},
+        headers=auth_headers,
+    )
+    interview_id = created.json()["interview_id"]
+    answer = "Um, it was, like, a hard project, but I would like to lead the next one."
+    response = await app_client.post(
+        f"/api/v1/interviews/{interview_id}/answer", json={"answer": answer}, headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+
+    detail = await app_client.get(f"/api/v1/interviews/{interview_id}", headers=auth_headers)
+    turn = detail.json()["turns"][0]
+    assert turn["filler_words"] == {"like": 1, "um": 1}

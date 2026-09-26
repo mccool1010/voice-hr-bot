@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.models.enums import (
     Competency,
@@ -19,6 +19,7 @@ from app.models.enums import (
     Seniority,
     TurnKind,
 )
+from app.scoring.features import filler_breakdown
 
 
 class InterviewCreate(BaseModel):
@@ -62,6 +63,12 @@ class TurnOut(BaseModel):
     transcription_confidence: float | None = None
     answered_at: datetime | None = None
     score: ScoreOut | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def filler_words(self) -> dict[str, int]:
+        """Filler words heard in the answer, for display only; never part of a score."""
+        return filler_breakdown(self.answer_text or "")
 
 
 class ReportOut(BaseModel):

@@ -116,6 +116,19 @@ HEDGE_PHRASES = (
 FILLERS = frozenset({"um", "uh", "er", "ah", "hmm", "mm", "eh", "uhh", "umm"})
 FILLER_PHRASES = ("you know", "i mean", "like i said", "basically", "actually", "literally")
 
+# Words after which "like" is a verb or a comparison, never a filler:
+# "I would like", "I like", "looks like", "feel like", "something like".
+_LIKE_NOT_FILLER_AFTER = frozenset(
+    {
+        "i", "we", "you", "they", "he", "she", "would", "i'd", "we'd", "you'd", "don't",
+        "didn't", "doesn't", "not", "to", "really", "also", "just", "feel", "feels", "felt",
+        "look", "looks", "looked", "seem", "seems", "seemed", "sound", "sounds", "something",
+        "anything", "nothing", "things", "stuff", "more", "much", "exactly",
+    }
+)  # fmt: skip
+_CLAUSE_OPENERS = frozenset({"and", "so", "but", "or"})
+_TOKEN_RE = re.compile(r"[a-z']+|[.,!?;:]")
+
 CONFIDENCE_MARKERS = (
     "i'm confident",
     "im confident",
@@ -199,6 +212,50 @@ class WordTiming:
                 # client; one malformed entry must not lose the whole answer.
                 continue
         return out
+
+
+def _is_filler_like(tokens: list[str], i: int) -> bool:
+    """Whether the "like" at ``tokens[i]`` is a filler rather than a verb or comparison.
+
+    Only positions that are fillers in practice count, so "I like Python" and
+    "tools like Redis" never do: set off by commas ("it was, like, hard"), opening
+    a clause ("Like, we..." / "and like, we..."), beside another filler ("um like",
+    "like, you know"), or repeated ("like like").
+    """
+    prev = tokens[i - 1] if i > 0 else None
+    nxt = tokens[i + 1] if i + 1 < len(tokens) else None
+    nxt2 = tokens[i + 2] if i + 2 < len(tokens) else None
+    if prev in _LIKE_NOT_FILLER_AFTER or (nxt == "i" and nxt2 == "said"):
+        return False  # "like I said" is counted once, as a phrase
+    if prev in FILLERS or prev == "like" or nxt in FILLERS:
+        return True
+    if nxt == "you" and nxt2 == "know":
+        return True
+    return nxt == "," and (
+        prev is None or prev in {".", "!", "?", ",", ";"} or prev in _CLAUSE_OPENERS
+    )
+
+
+def filler_breakdown(text: str) -> dict[str, int]:
+    """Count each filler word or phrase in an answer, most frequent first.
+
+    For showing the candidate what was heard, not for scoring. ``filler_rate``
+    feeds the trained model, so its lexicon stays exactly as the checkpoint was
+    trained; this breakdown uses the same lexicon and also counts "like" when it
+    is used as a filler. It never changes a score.
+    """
+    lower = text.lower()
+    tokens = _TOKEN_RE.findall(lower)
+    counts: dict[str, int] = {}
+    for i, tok in enumerate(tokens):
+        if tok in FILLERS or (tok == "like" and _is_filler_like(tokens, i)):
+            counts[tok] = counts.get(tok, 0) + 1
+    words_only = " ".join(t for t in tokens if t not in ".,!?;:")
+    for phrase in FILLER_PHRASES:
+        hits = len(re.findall(rf"\b{re.escape(phrase)}\b", words_only))
+        if hits:
+            counts[phrase] = counts.get(phrase, 0) + hits
+    return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
 def _count_phrases(text_lower: str, phrases: tuple[str, ...]) -> int:

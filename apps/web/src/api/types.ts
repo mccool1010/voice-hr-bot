@@ -52,6 +52,8 @@ export interface Turn {
   transcription_confidence: number | null;
   answered_at: string | null;
   score: Score | null;
+  /** Filler words heard in the answer, most frequent first. Display only; not part of any score. */
+  filler_words?: Record<string, number>;
 }
 
 export interface Report {

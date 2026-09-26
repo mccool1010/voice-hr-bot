@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { band, formatDelta, formatDuration, formatScore } from "./format";
+import { band, formatDelta, formatDuration, formatFillers, formatScore } from "./format";
 
 describe("format", () => {
   it("uses the same bands as the LLM rubric anchors", () => {
@@ -18,5 +18,11 @@ describe("format", () => {
     expect(formatDelta(-3)).toBe("-3");
     expect(formatDelta(null)).toBeNull();
     expect(formatDuration(75)).toBe("1:15");
+  });
+
+  it("lists filler words heard, or None", () => {
+    expect(formatFillers({ like: 2, um: 1 })).toBe("like ×2, um ×1");
+    expect(formatFillers({})).toBe("None");
+    expect(formatFillers(undefined)).toBe("None");
   });
 });

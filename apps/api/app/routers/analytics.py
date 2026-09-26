@@ -40,6 +40,8 @@ async def _scored_turns(db: DbSession, user_id: Any, limit: int) -> list[aggrega
         .limit(limit)
     )
 
+    # tuple(row): a 10-column Row is a variadic generic, which mypy 2.x refuses to unpack
+    # into names; a plain tuple unpacks the same values.
     return [
         aggregate.ScoredTurn(
             interview_id=str(interview_id),
@@ -64,7 +66,7 @@ async def _scored_turns(db: DbSession, user_id: Any, limit: int) -> list[aggrega
             clarity,
             depth,
             features,
-        ) in rows.all()
+        ) in (tuple(row) for row in rows.all())
     ]
 
 

@@ -82,3 +82,9 @@ export const formatDelta = (delta: number | null | undefined) => {
   const rounded = Math.round(delta);
   return rounded > 0 ? `+${rounded}` : String(rounded);
 };
+
+/** "like ×2, um ×1" — the API already sorts fillers by count; none gives "None". */
+export const formatFillers = (counts: Record<string, number> | null | undefined) => {
+  const entries = Object.entries(counts ?? {});
+  return entries.length ? entries.map(([word, n]) => `${word} ×${n}`).join(", ") : "None";
+};

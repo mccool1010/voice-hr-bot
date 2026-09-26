@@ -9,6 +9,7 @@ import { Badge, Button, Card, ErrorNote, ScoreBar, ScoreRing, SectionTitle, Spin
 import {
   COMPETENCY_LABEL,
   formatDate,
+  formatFillers,
   formatScore,
   PERSONA_META,
   RUBRIC_LABEL,
@@ -191,6 +192,7 @@ function TranscriptRow({ turn, number }: { turn: Turn; number: number }) {
               label="Question–answer similarity"
               value={score.relevance == null ? "—" : `${Math.round(score.relevance * 100)}%`}
             />
+            <SignalRow label="Filler words heard" value={formatFillers(turn.filler_words)} />
             {turn.transcription_confidence != null && (
               <SignalRow
                 label="Transcription confidence"

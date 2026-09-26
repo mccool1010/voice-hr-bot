@@ -12,6 +12,7 @@ from app.scoring.features import (
     extract_batch,
     extract_features,
     features_to_vector,
+    filler_breakdown,
 )
 
 STRONG_ANSWER = (
@@ -137,3 +138,55 @@ def test_batch_extraction_matches_single_extraction() -> None:
 def test_batch_requires_answer_column() -> None:
     with pytest.raises(ValueError, match="answer"):
         extract_batch(pd.DataFrame({"text": ["hello"]}))
+
+
+# ─── Filler breakdown (display only) ──────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "It was, like, the hardest sprint we had.",
+        "Like, we had no tests at all.",
+        "We shipped it and like, nobody noticed.",
+        "Um like we just rewrote it.",
+        "It was like um two weeks late.",
+        "I was like, like, really nervous.",
+        "The service was, like you know, falling over.",
+    ],
+)
+def test_filler_like_is_counted(text: str) -> None:
+    assert filler_breakdown(text).get("like", 0) >= 1
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I would like to lead a team next year.",
+        "I like Python more than Java.",
+        "We used tools like Redis and Kafka.",
+        "It looks like the cache was the bottleneck.",
+        "It took something like 20 percent longer.",
+        "I feel like the design was right.",
+        "Like I said, the rollout was staged.",
+    ],
+)
+def test_non_filler_like_is_not_counted(text: str) -> None:
+    assert "like" not in filler_breakdown(text)
+
+
+def test_breakdown_counts_each_filler_and_sorts_by_count() -> None:
+    text = "Um, so, like, we basically, um, had to, like, rewrite it, you know."
+    assert filler_breakdown(text) == {"like": 2, "um": 2, "basically": 1, "you know": 1}
+
+
+def test_breakdown_of_a_clean_or_empty_answer_is_empty() -> None:
+    assert filler_breakdown("") == {}
+    assert filler_breakdown(STRONG_ANSWER) == {}
+
+
+def test_breakdown_never_changes_model_features() -> None:
+    """The model's filler_rate keeps the lexicon it was trained on."""
+    text = "It was, like, a hard project and, like, we were late."
+    assert filler_breakdown(text)["like"] == 2
+    assert extract_features(text)["filler_rate"] == 0.0
